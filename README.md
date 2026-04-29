@@ -7,12 +7,11 @@ Insta360 X5, MacBook M3, HEVC/H.265, WebRTC 1:1 P2P, and Quest 3 を使う低遅
 ## 構成
 
 ```text
-x5-quest-webrtc-telepresence/
-  docs/
-  shared/protocol/
-  signaling-worker/
-  sender-mac/
-  receiver-quest/
+docs/
+shared/protocol/
+signaling-worker/
+sender-mac/
+receiver-quest/
 ```
 
 ## MVP 方針
