@@ -1,9 +1,11 @@
+import AppKit
 import CoreVideo
 import Foundation
 
 final class NativeReceiverWebRTCAdapter: ReceiverWebRTCAdapter {
     var onLocalAnswer: ((String) -> Void)?
     var onLocalIceCandidate: ((IceCandidatePayload) -> Void)?
+    var onPreviewRendererView: ((NSView) -> Void)?
     var onFrame: ((CVPixelBuffer) -> Void)?
 
     private let desktopClient: DesktopWebRTCClient

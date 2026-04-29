@@ -1,4 +1,5 @@
 #if HAS_LIVEKIT_WEBRTC
+import AppKit
 import CoreVideo
 import Foundation
 @preconcurrency import LiveKitWebRTC
@@ -6,6 +7,7 @@ import Foundation
 final class LiveKitReceiverWebRTCAdapter: NSObject, ReceiverWebRTCAdapter, @unchecked Sendable {
     var onLocalAnswer: ((String) -> Void)?
     var onLocalIceCandidate: ((IceCandidatePayload) -> Void)?
+    var onPreviewRendererView: ((NSView) -> Void)?
     var onFrame: ((CVPixelBuffer) -> Void)?
 
     private let queue = DispatchQueue(label: "telepresence.receiver.livekit-webrtc")
