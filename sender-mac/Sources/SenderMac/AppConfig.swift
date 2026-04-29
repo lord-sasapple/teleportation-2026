@@ -17,6 +17,7 @@ enum SenderCodec: String {
 struct AppConfig {
     var deviceNameHint: String = "Insta360 X5"
     var deviceUniqueId: String?
+    var useBuiltinCamera: Bool = false
     var width: Int32 = 2880
     var height: Int32 = 1440
     var fps: Int32 = 30
@@ -28,6 +29,7 @@ struct AppConfig {
     var durationSeconds: Double?
     var listDevices: Bool = false
     var signalingOnly: Bool = false
+    var glassToGlassTest: Bool = false
     var signalingBaseURL: URL?
     var roomId: String?
     var iceServers: [String] = ["stun:stun.l.google.com:19302"]
@@ -77,6 +79,10 @@ struct AppConfig {
                 config.listDevices = true
             case "--signaling-only":
                 config.signalingOnly = true
+            case "--latency-report-test", "--glass-to-glass-test":
+                config.glassToGlassTest = true
+            case "--builtin-camera":
+                config.useBuiltinCamera = true
             case "--signaling-url":
                 let rawURL = try value(after: arg)
                 guard let url = URL(string: rawURL) else {
@@ -114,6 +120,7 @@ struct AppConfig {
           --list-devices                 利用可能なカメラと format を表示して終了
           --device-name <name>           device localizedName の部分一致。既定: Insta360 X5
           --device-id <uniqueID>         device uniqueID を直接指定
+          --builtin-camera               内蔵カメラを優先的に使用 (X5 なし時のテスト用)
           --width <px>                   既定: 2880
           --height <px>                  既定: 1440
           --fps <fps>                    既定: 30
@@ -124,15 +131,20 @@ struct AppConfig {
           --max-frames <count>           指定フレーム数で停止
           --duration <seconds>           指定秒数で停止
           --signaling-only               カメラを使わず signaling / WebRTC 初期化だけ起動
+          --latency-report-test          DataChannel latency report 集計を有効化
+          --glass-to-glass-test          --latency-report-test の互換 alias
           --signaling-url <wss://...>    signaling-worker の base URL
           --room <roomId>                signaling-worker roomId
           --ice-server <url>             ICE server URL。複数指定可。既定: stun:stun.l.google.com:19302
 
         Examples:
           swift run sender-mac --list-devices
+          swift run sender-mac --builtin-camera --codec hevc --duration 10
+          swift run sender-mac --builtin-camera --codec h264 --duration 10
           swift run sender-mac --codec hevc --duration 10
           swift run sender-mac --codec h264 --bitrate 16000000 --max-frames 300
           swift run sender-mac --signaling-only --signaling-url wss://example.workers.dev --room smoke --duration 5
+          swift run sender-mac --latency-report-test --signaling-url wss://example.workers.dev --room latency-test --duration 30
         """
     }
 

@@ -26,6 +26,7 @@ protocol WebRTCSenderAdapter: Sendable {
     func sendRawFrame(_ frame: RawVideoFrame)
     func sendEncodedFrame(_ frame: EncodedVideoFrame)
     func sendFrameTimestamp(_ message: FrameTimestampMessage)
+    func setReceivedDataChannelHandler(_ handler: @escaping @Sendable (Data) -> Void)
 }
 
 final class NativeWebRTCSenderUnavailableAdapter: WebRTCSenderAdapter, @unchecked Sendable {
@@ -85,5 +86,9 @@ final class NativeWebRTCSenderUnavailableAdapter: WebRTCSenderAdapter, @unchecke
         if let json = message.jsonString() {
             Logger.info("DataChannel timestamp stub: \(json)")
         }
+    }
+
+    func setReceivedDataChannelHandler(_ handler: @escaping @Sendable (Data) -> Void) {
+        _ = handler
     }
 }

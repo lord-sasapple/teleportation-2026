@@ -4,9 +4,12 @@ final class SenderSession: @unchecked Sendable {
     private let config: AppConfig
     private let webRTC: WebRTCSenderAdapter
     private let signalingClient: SignalingClient?
+    private var statsMonitor: SenderStatsMonitor?
+    private let glassToGlassTestMode: GlassToGlassTestMode
 
     init(config: AppConfig) {
         self.config = config
+        self.glassToGlassTestMode = GlassToGlassTestMode(enabled: config.glassToGlassTest)
 
         if let signalingBaseURL = config.signalingBaseURL,
            let roomId = config.roomId,
@@ -20,6 +23,20 @@ final class SenderSession: @unchecked Sendable {
         }
 
         self.webRTC = WebRTCAdapterFactory.make(config: config, signalingClient: signalingClient)
+        self.statsMonitor = SenderStatsMonitor(codec: config.codec, logEveryFrames: config.logEveryFrames)
+
+        // 受信側が返す frame-latency-report を application latency 集計へ渡します。
+        self.webRTC.setReceivedDataChannelHandler { [weak self] data in
+            self?.handleReceivedDataChannelMessage(data)
+        }
+    }
+
+    func setStatsMonitor(_ monitor: SenderStatsMonitor) {
+        self.statsMonitor = monitor
+    }
+
+    func getGlassToGlassTestMode() -> GlassToGlassTestMode {
+        glassToGlassTestMode
     }
 
     func start() {
@@ -41,6 +58,7 @@ final class SenderSession: @unchecked Sendable {
 
     func handleEncodedFrame(_ frame: EncodedVideoFrame) {
         webRTC.sendEncodedFrame(frame)
+        statsMonitor?.recordSentFrame(frame.log.sequence)
 
         let sendTimeMs = Clock.wallTimeMs()
         let timestamp = FrameTimestampMessage(
@@ -51,6 +69,7 @@ final class SenderSession: @unchecked Sendable {
             sendTimeMs: sendTimeMs
         )
         webRTC.sendFrameTimestamp(timestamp)
+        glassToGlassTestMode.recordFrameTimestamp(timestamp)
     }
 
     private func handleSignalingMessage(_ message: SignalingServerMessage) {
@@ -81,6 +100,26 @@ final class SenderSession: @unchecked Sendable {
             Logger.info("signaling latency-sync を受信しました: seq=\(sequence) senderTimeMs=\(senderTimeMs)")
         case .unknown(let type):
             Logger.warn("未知の signaling message です: type=\(type)")
+        }
+    }
+
+    private func handleReceivedDataChannelMessage(_ data: Data) {
+        guard let json = String(data: data, encoding: .utf8) else {
+            return
+        }
+
+        if let jsonData = json.data(using: .utf8) {
+            let decoder = JSONDecoder()
+            do {
+                if let jsonObject = try JSONSerialization.jsonObject(with: jsonData) as? [String: Any],
+                   let type = jsonObject["type"] as? String,
+                   type == "frame-latency-report" {
+                    let report = try decoder.decode(FrameLatencyReportMessage.self, from: jsonData)
+                    glassToGlassTestMode.recordLatencyReport(report)
+                }
+            } catch {
+                Logger.info("DataChannel message を parse できません: \(error)")
+            }
         }
     }
 }

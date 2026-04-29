@@ -25,7 +25,7 @@
 - [x] LiveKitWebRTC provider wiring
 - [x] LiveKitWebRTC PeerConnection / DataChannel / raw frame adapter implementation
 - [ ] Xcode macOS app bundle
-- [ ] Info.plist camera usage description
+- [x] Info.plist camera usage description
 - [x] libwebrtc native dependency strategy
 - [x] acquire/build macOS-compatible WebRTC.xcframework candidate
 - [x] compile native adapter against the chosen WebRTC.xcframework
@@ -33,7 +33,8 @@
 - [ ] run sender with X5 using WEBRTC_PROVIDER=livekit
 - [ ] verify HEVC/H.265 negotiation with Quest receiver
 - [ ] DataChannel latency message end-to-end with receiver
-- [ ] SenderStatsMonitor
+- [x] SenderStatsMonitor
 - [x] SDP codec negotiation logging
-- [ ] selected codec stats logging
+- [x] selected codec stats logging
+- [x] application latency report aggregation
 - [ ] glass-to-glass test mode

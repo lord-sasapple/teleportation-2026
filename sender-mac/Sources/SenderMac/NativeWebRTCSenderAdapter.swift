@@ -13,6 +13,7 @@ final class NativeWebRTCSenderAdapter: NSObject, WebRTCSenderAdapter, @unchecked
     private var videoSource: RTCVideoSource?
     private var videoCapturer: RTCVideoCapturer?
     private var dataChannel: RTCDataChannel?
+    private var receivedDataChannelHandler: (@Sendable (Data) -> Void)?
 
     init(config: AppConfig, signalingClient: SignalingClient?) {
         self.config = config
@@ -144,6 +145,22 @@ final class NativeWebRTCSenderAdapter: NSObject, WebRTCSenderAdapter, @unchecked
             } else if message.sequence == 1 || message.sequence % Int64(max(self.config.logEveryFrames, 1)) == 0 {
                 Logger.warn("DataChannel が未openのため frame-timestamp を送れません: seq=\(message.sequence)")
             }
+        }
+    }
+
+    func handleReceivedDataChannelMessage(_ data: Data) {
+        receivedDataChannelHandler?(data)
+
+        if let text = String(data: data, encoding: .utf8) {
+            Logger.info("DataChannel message received: \(text)")
+        } else {
+            Logger.info("DataChannel binary message received: bytes=\(data.count)")
+        }
+    }
+
+    func setReceivedDataChannelHandler(_ handler: @escaping @Sendable (Data) -> Void) {
+        queue.async { [weak self] in
+            self?.receivedDataChannelHandler = handler
         }
     }
 
@@ -297,11 +314,7 @@ extension NativeWebRTCSenderAdapter: RTCDataChannelDelegate {
     }
 
     func dataChannel(_ dataChannel: RTCDataChannel, didReceiveMessageWith buffer: RTCDataBuffer) {
-        if let text = String(data: buffer.data, encoding: .utf8) {
-            Logger.info("DataChannel message received: \(text)")
-        } else {
-            Logger.info("DataChannel binary message received: bytes=\(buffer.data.count)")
-        }
+        handleReceivedDataChannelMessage(buffer.data)
     }
 }
 #endif

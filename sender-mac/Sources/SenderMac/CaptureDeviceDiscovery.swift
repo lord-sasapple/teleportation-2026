@@ -20,6 +20,15 @@ struct CaptureDeviceDiscovery {
             return device
         }
 
+        // --builtin-camera フラグが立っている場合は内蔵カメラを優先
+        if config.useBuiltinCamera {
+            if let builtinDevice = devices.first(where: { $0.deviceType == .builtInWideAngleCamera }) {
+                Logger.info("内蔵カメラを使用します: \(builtinDevice.localizedName)")
+                return builtinDevice
+            }
+            Logger.warn("--builtin-camera が指定されていますが内蔵カメラが見つかりません")
+        }
+
         let hint = config.deviceNameHint.lowercased()
         if let device = devices.first(where: { $0.localizedName.lowercased().contains(hint) }) {
             return device
@@ -55,7 +64,7 @@ struct CaptureDeviceDiscovery {
     }
 
     static func configureFormat(device: AVCaptureDevice, config: AppConfig) throws {
-        guard let format = chooseFormat(device: device, width: config.width, height: config.height, fps: config.fps) else {
+        guard let selection = chooseFormat(device: device, config: config) else {
             throw SenderError.noMatchingFormat(deviceName: device.localizedName, width: config.width, height: config.height, fps: config.fps)
         }
 
@@ -64,30 +73,78 @@ struct CaptureDeviceDiscovery {
             device.unlockForConfiguration()
         }
 
-        device.activeFormat = format
-        let frameDuration = CMTime(value: 1, timescale: config.fps)
+        device.activeFormat = selection.format
+        let frameDuration = CMTime(value: 1, timescale: selection.fps)
         device.activeVideoMinFrameDuration = frameDuration
         device.activeVideoMaxFrameDuration = frameDuration
 
-        let dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
-        Logger.info("capture format を設定しました: \(dimensions.width)x\(dimensions.height) @ \(config.fps)fps")
+        let dimensions = CMVideoFormatDescriptionGetDimensions(selection.format.formatDescription)
+        if !selection.isExactMatch {
+            Logger.warn("要求 format が見つからないため近い format を使います: requested=\(config.width)x\(config.height)@\(config.fps)fps actual=\(dimensions.width)x\(dimensions.height)@\(selection.fps)fps")
+        }
+        Logger.info("capture format を設定しました: \(dimensions.width)x\(dimensions.height) @ \(selection.fps)fps")
     }
 
-    private static func chooseFormat(device: AVCaptureDevice, width: Int32, height: Int32, fps: Int32) -> AVCaptureDevice.Format? {
+    private static func chooseFormat(device: AVCaptureDevice, config: AppConfig) -> FormatSelection? {
         let matches = device.formats.filter { format in
             let dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
-            let supportsResolution = dimensions.width == width && dimensions.height == height
+            let supportsResolution = dimensions.width == config.width && dimensions.height == config.height
             let supportsFPS = format.videoSupportedFrameRateRanges.contains { range in
-                range.minFrameRate <= Double(fps) && range.maxFrameRate >= Double(fps)
+                range.minFrameRate <= Double(config.fps) && range.maxFrameRate >= Double(config.fps)
             }
             return supportsResolution && supportsFPS
         }
 
-        return matches.sorted { lhs, rhs in
+        if let exact = matches.sorted(by: { lhs, rhs in
             let lhsMaxFPS = lhs.videoSupportedFrameRateRanges.map(\.maxFrameRate).max() ?? 0
             let rhsMaxFPS = rhs.videoSupportedFrameRateRanges.map(\.maxFrameRate).max() ?? 0
             return lhsMaxFPS < rhsMaxFPS
-        }.first
+        }).first {
+            return FormatSelection(format: exact, fps: config.fps, isExactMatch: true)
+        }
+
+        guard config.useBuiltinCamera else {
+            return nil
+        }
+
+        return chooseClosestBuiltinFormat(device: device, targetWidth: config.width, targetHeight: config.height, targetFPS: config.fps)
+    }
+
+    private static func chooseClosestBuiltinFormat(device: AVCaptureDevice, targetWidth: Int32, targetHeight: Int32, targetFPS: Int32) -> FormatSelection? {
+        let candidates = device.formats.compactMap { format -> (format: AVCaptureDevice.Format, dimensions: CMVideoDimensions, fps: Int32, supportsTargetFPS: Bool)? in
+            let ranges = format.videoSupportedFrameRateRanges
+            guard let bestRange = ranges.max(by: { $0.maxFrameRate < $1.maxFrameRate }) else {
+                return nil
+            }
+            let supportsTargetFPS = ranges.contains { range in
+                range.minFrameRate <= Double(targetFPS) && range.maxFrameRate >= Double(targetFPS)
+            }
+            let selectedFPS = supportsTargetFPS ? targetFPS : Int32(bestRange.maxFrameRate.rounded(.down))
+            let dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
+            return (format, dimensions, max(1, selectedFPS), supportsTargetFPS)
+        }
+
+        let targetPixels = Int(targetWidth) * Int(targetHeight)
+        let sorted = candidates.sorted { lhs, rhs in
+            if lhs.supportsTargetFPS != rhs.supportsTargetFPS {
+                return lhs.supportsTargetFPS && !rhs.supportsTargetFPS
+            }
+
+            let lhsPixels = Int(lhs.dimensions.width) * Int(lhs.dimensions.height)
+            let rhsPixels = Int(rhs.dimensions.width) * Int(rhs.dimensions.height)
+            let lhsScore = abs(lhsPixels - targetPixels)
+            let rhsScore = abs(rhsPixels - targetPixels)
+            if lhsScore != rhsScore {
+                return lhsScore < rhsScore
+            }
+            return lhs.fps > rhs.fps
+        }
+
+        guard let best = sorted.first else {
+            return nil
+        }
+
+        return FormatSelection(format: best.format, fps: best.fps, isExactMatch: false)
     }
 
     private static func printFormats(for device: AVCaptureDevice) {
@@ -101,6 +158,12 @@ struct CaptureDeviceDiscovery {
             Logger.info("  format: \(dimensions.width)x\(dimensions.height) codec=\(codec) fps=[\(ranges)]")
         }
     }
+}
+
+private struct FormatSelection {
+    let format: AVCaptureDevice.Format
+    let fps: Int32
+    let isExactMatch: Bool
 }
 
 private extension FourCharCode {

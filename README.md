@@ -2,7 +2,7 @@
 
 Insta360 X5, MacBook M3, HEVC/H.265, WebRTC 1:1 P2P, and Quest 3 を使う低遅延 360 度テレプレゼンス MVP です。
 
-現在の実装では、Cloudflare Workers + Durable Objects の signaling-worker、共有プロトコル、sender-mac の capture/encode/WebRTC 送信骨格、receiver-quest の Unity/signaling/overlay/rendering skeleton を用意しています。映像と音声は signaling-worker を通りません。
+現在の実装では、Cloudflare Workers + Durable Objects の signaling-worker、共有プロトコル、sender-mac の capture/encode/WebRTC 送信骨格、receiver-quest の Unity/signaling/overlay/rendering skeleton、Mac だけで実験するための receiver-mac を用意しています。映像と音声は signaling-worker を通りません。
 
 ## 構成
 
@@ -12,6 +12,7 @@ shared/protocol/
 signaling-worker/
 sender-mac/
 receiver-quest/
+receiver-mac/
 ```
 
 ## MVP 方針
@@ -59,3 +60,19 @@ WEBRTC_PROVIDER=livekit DURATION=60 ./Scripts/run-codec-comparison.sh
 ## receiver-quest
 
 Unity 2022.3 LTS 以降で `receiver-quest` を開きます。現時点では Android native libwebrtc / MediaCodec 実装前の skeleton で、signaling、DataChannel timestamp 処理、stats overlay、inside-out sphere renderer まで入っています。
+
+## receiver-mac
+
+Quest が手元にない時の Mac-only 実験用 receiver です。MVP の本命は `receiver-quest` のままですが、sender の signaling、offer/answer、ICE、codec negotiation、低遅延ログを Mac 上で早く試すために置いています。
+
+```bash
+cd receiver-mac
+WEBRTC_PROVIDER=livekit swift build
+WEBRTC_PROVIDER=livekit ./Scripts/run-receiver-signaling.sh
+```
+
+内蔵カメラで sender と receiver を同じ Mac 上でまとめて起動する場合:
+
+```bash
+./scripts/run-mac-builtin-camera-p2p.sh
+```

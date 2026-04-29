@@ -8,11 +8,13 @@ final class LiveKitWebRTCSenderAdapter: NSObject, WebRTCSenderAdapter, @unchecke
     private weak var signalingClient: SignalingClient?
     private let queue = DispatchQueue(label: "telepresence.sender.livekit-webrtc")
     private let factory: LKRTCPeerConnectionFactory
+    private let codecStatsLogger = CodecStatsLogger()
     private var peerConnection: LKRTCPeerConnection?
     private var videoSource: LKRTCVideoSource?
     private var videoCapturer: LKRTCVideoCapturer?
     private var dataChannel: LKRTCDataChannel?
     private var hasLoggedEncodedFrame = false
+    private var receivedDataChannelHandler: (@Sendable (Data) -> Void)?
 
     init(config: AppConfig, signalingClient: SignalingClient?) {
         self.config = config
@@ -21,7 +23,10 @@ final class LiveKitWebRTCSenderAdapter: NSObject, WebRTCSenderAdapter, @unchecke
 
         let encoderFactory = LKRTCDefaultVideoEncoderFactory()
         let decoderFactory = LKRTCDefaultVideoDecoderFactory()
-        Self.logSupportedCodecs(encoderFactory: encoderFactory)
+
+        let supportedCodecNames = type(of: encoderFactory).supportedCodecs().map(\.name)
+        codecStatsLogger.logSupportedCodecs(supportedCodecNames)
+        Self.warnIfHEVCUnsupported(codecNames: supportedCodecNames)
         factory = LKRTCPeerConnectionFactory(encoderFactory: encoderFactory, decoderFactory: decoderFactory)
 
         super.init()
@@ -63,7 +68,13 @@ final class LiveKitWebRTCSenderAdapter: NSObject, WebRTCSenderAdapter, @unchecke
 
     func handleAnswer(sdp: String) {
         queue.async { [weak self] in
-            guard let peerConnection = self?.peerConnection else {
+            guard let self else {
+                return
+            }
+
+            self.codecStatsLogger.logSdpAnswer(sdp)
+
+            guard let peerConnection = self.peerConnection else {
                 Logger.warn("answer 受信時点で PeerConnection がありません")
                 return
             }
@@ -151,6 +162,16 @@ final class LiveKitWebRTCSenderAdapter: NSObject, WebRTCSenderAdapter, @unchecke
         }
     }
 
+    func handleReceivedDataChannelMessage(_ data: Data) {
+        queue.async { [weak self] in
+            self?.receivedDataChannelHandler?(data)
+        }
+    }
+
+    func setReceivedDataChannelHandler(_ handler: @escaping @Sendable (Data) -> Void) {
+        receivedDataChannelHandler = handler
+    }
+
     private func ensurePeerConnection() {
         guard peerConnection == nil else {
             return
@@ -219,10 +240,17 @@ final class LiveKitWebRTCSenderAdapter: NSObject, WebRTCSenderAdapter, @unchecke
                 return
             }
 
+            self.codecStatsLogger.logSdpOffer(description.sdp)
+
             let preferredSDP = SDPCodecPreference.preferVideoCodecs(
                 in: description.sdp,
                 first: ["H265", "HEVC", "H264"]
             )
+            self.codecStatsLogger.logCodecPreference(
+                preferred: ["H265", "HEVC", "H264"],
+                sdp: preferredSDP
+            )
+
             let preferredDescription = LKRTCSessionDescription(type: .offer, sdp: preferredSDP)
             peerConnection.setLocalDescription(preferredDescription) { [weak self] error in
                 if let error {
@@ -248,9 +276,7 @@ final class LiveKitWebRTCSenderAdapter: NSObject, WebRTCSenderAdapter, @unchecke
         }
     }
 
-    private static func logSupportedCodecs(encoderFactory: LKRTCDefaultVideoEncoderFactory) {
-        let codecNames = type(of: encoderFactory).supportedCodecs().map(\.name)
-        Logger.info("LiveKitWebRTC encoder supported codecs: \(codecNames.joined(separator: ","))")
+    private static func warnIfHEVCUnsupported(codecNames: [String]) {
         if codecNames.contains(where: { $0.uppercased().contains("H265") || $0.uppercased().contains("HEVC") }) {
             Logger.info("LiveKitWebRTC encoder は HEVC/H.265 候補を公開しています")
         } else {
@@ -310,6 +336,8 @@ extension LiveKitWebRTCSenderAdapter: LKRTCDataChannelDelegate {
     }
 
     func dataChannel(_ dataChannel: LKRTCDataChannel, didReceiveMessageWith buffer: LKRTCDataBuffer) {
+        handleReceivedDataChannelMessage(buffer.data)
+
         if let text = String(data: buffer.data, encoding: .utf8) {
             Logger.info("DataChannel message received: \(text)")
         } else {

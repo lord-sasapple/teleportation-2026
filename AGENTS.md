@@ -1,10 +1,11 @@
 # AGENTS.md
 
-このリポジトリは 3 つのアプリからなる低遅延 360 度テレプレゼンス MVP です。
+このリポジトリは本命 3 アプリと、Mac-only 実験用 receiver からなる低遅延 360 度テレプレゼンス MVP です。
 
 - `sender-mac`: MacBook M3 上の Swift/macOS 送信アプリです。
 - `signaling-worker`: Cloudflare Workers + Durable Objects のシグナリング専用サーバーです。
 - `receiver-quest`: Quest 3 上の Unity 受信アプリです。
+- `receiver-mac`: Quest が手元にない時の実験用 Swift/macOS 受信アプリです。本命 receiver は `receiver-quest` です。
 
 ## 重要な制約
 
@@ -25,4 +26,3 @@
 ## ドキュメント
 
 変更したら README と `docs/` も更新してください。特にコーデック方針、シグナリング仕様、遅延測定仕様は実装とずれないようにしてください。
-

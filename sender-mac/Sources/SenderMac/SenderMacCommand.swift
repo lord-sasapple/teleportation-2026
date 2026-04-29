@@ -65,6 +65,9 @@ struct SenderMacCommand {
         )
         stopController.pipeline = pipeline
 
+        // CapturePipeline 側の encode 統計と sender 側の送信カウントを同じ monitor に寄せます。
+        senderSession.setStatsMonitor(pipeline.getStatsMonitor())
+
         if let durationSeconds = config.durationSeconds {
             DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + durationSeconds) {
                 Logger.info("duration に到達しました: \(durationSeconds)s")
@@ -77,6 +80,7 @@ struct SenderMacCommand {
         stopController.waitUntilStopped()
 
         interruptSource.cancel()
+        senderSession.getGlassToGlassTestMode().printFinalStats()
         Logger.info("sender-mac を終了しました")
     }
 
@@ -101,6 +105,7 @@ struct SenderMacCommand {
 
         stopController.waitUntilStopped()
         interruptSource.cancel()
+        senderSession.getGlassToGlassTestMode().printFinalStats()
         Logger.info("sender-mac signaling-only を終了しました")
     }
 

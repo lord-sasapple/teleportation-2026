@@ -56,3 +56,46 @@ Unity 2022.3 LTS 以降を想定しています。
 ## 後続 TODO
 
 詳細は [TODO.md](TODO.md) を参照してください。
+
+## Unity Editor で受信側をテストする（Quest がない環境向け）
+
+開発中は Quest 実機が無くても Unity Editor を使って受信側のシグナリング、DataChannel、overlay 表示などの動作確認ができます。プロジェクトには Editor 用の stub 実装 (`EditorStubQuestWebRTCClient`) が含まれており、placeholder テクスチャと stub の `answer` を返します。
+
+手順:
+
+1. signaling-worker をローカルで起動します（別ターミナル）:
+
+```bash
+cd signaling-worker
+npm install
+npm run dev
+
+# 確認
+curl http://127.0.0.1:8787/healthz
+```
+
+2. sender 側をローカルで起動します（内蔵カメラや signaling-only を使ってテスト可能）:
+
+```bash
+cd sender-mac
+# 内蔵カメラで送信（Editor stub で latency/datachannel の確認）
+./Scripts/run-builtin-camera.sh \
+  # 必要に応じて CODEC=h264 などを指定
+
+# または signaling-only モードで接続のみ確認
+WEBRTC_PROVIDER=livekit ./Scripts/run-signaling-only.sh
+```
+
+3. Unity Editor で `receiver-quest` を開き、Play を押します。
+
+4. `ReceiverQuestApp` の inspector 上で `signalingUrl` を `ws://127.0.0.1:8787`（またはローカルの wrangler dev URL）に、`roomId` を sender と合わせます。
+
+5. Sender が `offer` を送ると Editor stub が `answer` を返し、overlay に接続状態・統計が表示されます。DataChannel 経由の `frame-timestamp` で latency overlay の挙動も確認できます。
+
+注意点:
+- Editor stub は実際のビデオストリームをデコードしないため、映像品質の検証はできません。映像の実再生を Mac だけで試す場合は `receiver-mac` を使います。
+- HEVC を使う完全な Quest end-to-end テストを行うには Quest 実機が必要です。開発時は `receiver-mac` と `--codec h264` で互換性の高い経路を使うと速く検証できます。
+
+次のステップ候補:
+- Android native client の MediaCodec decode と SurfaceTexture / external texture bridge を実装する
+- `receiver-mac` の VideoTrack -> CVPixelBuffer -> 360 viewer 表示を実装する

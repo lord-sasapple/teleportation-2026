@@ -1,0 +1,32 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleDevelopmentRegion</key>
+	<string>ja</string>
+	<key>CFBundleExecutable</key>
+	<string>SenderMac</string>
+	<key>CFBundleIdentifier</key>
+	<string>com.telepresence.sender-mac</string>
+	<key>CFBundleInfoDictionaryVersion</key>
+	<string>6.0</string>
+	<key>CFBundleName</key>
+	<string>SenderMac</string>
+	<key>CFBundlePackageType</key>
+	<string>APPL</string>
+	<key>CFBundleShortVersionString</key>
+	<string>0.1</string>
+	<key>CFBundleVersion</key>
+	<string>1</string>
+	<key>NSCameraUsageDescription</key>
+	<string>Insta360 X5 またはその他の USB ウェブカメラから 360 度映像をキャプチャするために、カメラへのアクセス権が必要です。</string>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>オーディオ capture は現在不使用ですが、今後の拡張に備えて権限を要求します。</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>WebRTC 通信のための local network へのアクセス権が必要です。</string>
+	<key>NSBonjourServices</key>
+	<array/>
+	<key>NSSupportsAutomaticGraphicsSwitching</key>
+	<true/>
+</dict>
+</plist>

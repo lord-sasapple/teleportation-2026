@@ -7,6 +7,7 @@ final class CapturePipeline: NSObject, AVCaptureVideoDataOutputSampleBufferDeleg
     private let session = AVCaptureSession()
     private let captureQueue = DispatchQueue(label: "telepresence.sender.capture")
     private let encoder: VideoEncoder
+    private let statsMonitor: SenderStatsMonitor
     private var sequence: Int64 = 0
     private var isRunning = false
     private var rawFrameHandler: (@Sendable (RawVideoFrame) -> Void)?
@@ -25,9 +26,15 @@ final class CapturePipeline: NSObject, AVCaptureVideoDataOutputSampleBufferDeleg
 
         let dimensions = CMVideoFormatDescriptionGetDimensions(device.activeFormat.formatDescription)
         encoder = try VideoEncoder(config: config, width: dimensions.width, height: dimensions.height)
-        encoder.encodedFrameHandler = encodedFrameHandler
+        statsMonitor = SenderStatsMonitor(codec: config.codec, logEveryFrames: config.logEveryFrames)
 
         super.init()
+
+        let wrappedEncodedFrameHandler = encodedFrameHandler
+        encoder.encodedFrameHandler = { [weak self] frame in
+            self?.statsMonitor.recordEncodedFrame(frame.log)
+            wrappedEncodedFrameHandler?(frame)
+        }
 
         try configureSession(device: device)
     }
@@ -50,13 +57,20 @@ final class CapturePipeline: NSObject, AVCaptureVideoDataOutputSampleBufferDeleg
         isRunning = false
         session.stopRunning()
         encoder.finish()
+        statsMonitor.printFinalStats()
         Logger.info("capture session を停止しました")
+    }
+
+    func getStatsMonitor() -> SenderStatsMonitor {
+        statsMonitor
     }
 
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
         sequence += 1
         let currentSequence = sequence
         let captureTimeMs = Clock.wallTimeMs()
+
+        statsMonitor.recordCapturedFrame()
 
         if currentSequence == 1 || currentSequence % Int64(max(config.logEveryFrames, 1)) == 0 {
             Logger.info("captured frame: seq=\(currentSequence) captureTimeMs=\(captureTimeMs)")
