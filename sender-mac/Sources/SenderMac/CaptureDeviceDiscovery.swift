@@ -137,7 +137,7 @@ struct CaptureDeviceDiscovery {
     }
 
     private static func chooseClosestBuiltinFormat(device: AVCaptureDevice, targetWidth: Int32, targetHeight: Int32, targetFPS: Int32) -> FormatSelection? {
-        let candidates = device.formats.compactMap { format -> (format: AVCaptureDevice.Format, dimensions: CMVideoDimensions, fps: Int32, supportsTargetFPS: Bool)? in
+        let candidates = device.formats.compactMap { format -> (format: AVCaptureDevice.Format, dimensions: CMVideoDimensions, fps: Double, supportsTargetFPS: Bool)? in
             let ranges = format.videoSupportedFrameRateRanges
             guard let bestRange = ranges.max(by: { $0.maxFrameRate < $1.maxFrameRate }) else {
                 return nil
