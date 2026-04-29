@@ -8,6 +8,7 @@ let hasWebRTCFramework = FileManager.default.fileExists(atPath: webRTCFrameworkP
 let webRTCProvider = ProcessInfo.processInfo.environment["WEBRTC_PROVIDER"] ?? "local"
 let useLiveKitWebRTC = webRTCProvider == "livekit"
 let useLiveKitSDK = webRTCProvider == "livekit-sdk"
+let useStaselWebRTC = webRTCProvider == "stasel"
 
 var products: [Product] = []
 var targets: [Target] = []
@@ -44,6 +45,27 @@ if useLiveKitWebRTC {
 
     products.append(
         .executable(name: "livekit-sdk-probe", targets: ["LiveKitSDKProbe"])
+    )
+} else if useStaselWebRTC {
+    dependencies.append(
+        .package(
+            url: "https://github.com/stasel/WebRTC.git",
+            branch: "latest"
+        )
+    )
+
+    targets.append(
+        .executableTarget(
+            name: "StaselWebRTCProbe",
+            dependencies: [
+                .product(name: "WebRTC", package: "WebRTC")
+            ],
+            path: "Sources/StaselWebRTCProbe"
+        )
+    )
+
+    products.append(
+        .executable(name: "stasel-webrtc-probe", targets: ["StaselWebRTCProbe"])
     )
 } else if hasWebRTCFramework {
     targets.append(
