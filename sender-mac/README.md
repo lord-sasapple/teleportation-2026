@@ -36,6 +36,13 @@ libwebrtc native framework の検出:
 ./Scripts/check-webrtc.sh
 ```
 
+LiveKitWebRTC provider を使う場合:
+
+```bash
+WEBRTC_PROVIDER=livekit ./Scripts/check-webrtc.sh
+WEBRTC_PROVIDER=livekit swift build
+```
+
 期待する配置:
 
 ```text
@@ -93,10 +100,12 @@ libwebrtc native は通常 raw frame を `RTCVideoSource` に渡し、libwebrtc 
 
 外部 `VTCompressionSession` は HEVC/H.265 と H.264 の hardware encode 可否、encode 時間、keyframe、encoded size を測るために残しています。実際の WebRTC 送信 codec は libwebrtc 側の codec negotiation と encoder 実装に依存します。HEVC/H.265 first を維持しつつ、H.264 fallback を必ず残します。
 
+`WEBRTC_PROVIDER=livekit` では LiveKit の `webrtc-xcframework` を prebuilt libwebrtc として使います。LiveKit の SFU や Cloud は使いません。media path は WebRTC 1:1 P2P のままです。
+
 ## 現在の制限
 
-- `WebRTC.xcframework` は repo に同梱していません。
-- `HAS_WEBRTC` 有効時の native adapter は実装骨格です。実際の framework API と照合して仕上げる必要があります。
+- local `WebRTC.xcframework` は repo に同梱していません。
+- `WEBRTC_PROVIDER=livekit` の native adapter は compile 済みですが、X5 と Quest receiver での実機 P2P 検証はまだです。
 - `WebRTC.xcframework` 未配置時は stub adapter で動きます。
 - Xcode `.app` bundle と `Info.plist` は未作成です。
 - WebRTC stats は未実装です。

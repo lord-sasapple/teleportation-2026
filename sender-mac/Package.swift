@@ -5,12 +5,24 @@ import PackageDescription
 
 let webRTCFrameworkPath = "ThirdParty/WebRTC/WebRTC.xcframework"
 let hasWebRTCFramework = FileManager.default.fileExists(atPath: webRTCFrameworkPath)
+let webRTCProvider = ProcessInfo.processInfo.environment["WEBRTC_PROVIDER"] ?? "local"
+let useLiveKitWebRTC = webRTCProvider == "livekit"
 
 var targets: [Target] = []
+var dependencies: [Package.Dependency] = []
 var senderDependencies: [Target.Dependency] = []
 var senderSwiftSettings: [SwiftSetting] = []
 
-if hasWebRTCFramework {
+if useLiveKitWebRTC {
+    dependencies.append(
+        .package(
+            url: "https://github.com/livekit/webrtc-xcframework.git",
+            exact: "144.7559.04"
+        )
+    )
+    senderDependencies.append(.product(name: "LiveKitWebRTC", package: "webrtc-xcframework"))
+    senderSwiftSettings.append(.define("HAS_LIVEKIT_WEBRTC"))
+} else if hasWebRTCFramework {
     targets.append(
         .binaryTarget(
             name: "WebRTC",
@@ -38,5 +50,6 @@ let package = Package(
     products: [
         .executable(name: "sender-mac", targets: ["SenderMac"])
     ],
+    dependencies: dependencies,
     targets: targets
 )

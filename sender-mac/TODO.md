@@ -21,13 +21,16 @@
 - [x] native RTCDataChannel timestamp send skeleton
 - [x] local offer / remote answer / ICE signaling skeleton
 - [x] SDP HEVC/H.265 first payload ordering helper
+- [x] LiveKitWebRTC provider wiring
+- [x] LiveKitWebRTC PeerConnection / DataChannel / raw frame adapter implementation
 - [ ] Xcode macOS app bundle
 - [ ] Info.plist camera usage description
 - [x] libwebrtc native dependency strategy
-- [ ] acquire/build macOS-compatible WebRTC.xcframework
-- [ ] compile native adapter against the chosen WebRTC.xcframework
-- [ ] verify RTCPeerConnectionFactory / RTCVideoSource APIs for selected WebRTC build
-- [ ] verify HEVC/H.265 support in selected WebRTC build
+- [x] acquire/build macOS-compatible WebRTC.xcframework candidate
+- [x] compile native adapter against the chosen WebRTC.xcframework
+- [x] verify RTCPeerConnectionFactory / RTCVideoSource APIs for selected WebRTC build
+- [ ] run sender with X5 using WEBRTC_PROVIDER=livekit
+- [ ] verify HEVC/H.265 negotiation with Quest receiver
 - [ ] DataChannel latency message end-to-end with receiver
 - [ ] SenderStatsMonitor
 - [ ] SDP codec negotiation logging
