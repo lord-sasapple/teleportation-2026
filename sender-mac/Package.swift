@@ -7,7 +7,9 @@ let webRTCFrameworkPath = "ThirdParty/WebRTC/WebRTC.xcframework"
 let hasWebRTCFramework = FileManager.default.fileExists(atPath: webRTCFrameworkPath)
 let webRTCProvider = ProcessInfo.processInfo.environment["WEBRTC_PROVIDER"] ?? "local"
 let useLiveKitWebRTC = webRTCProvider == "livekit"
+let useLiveKitSDK = webRTCProvider == "livekit-sdk"
 
+var products: [Product] = []
 var targets: [Target] = []
 var dependencies: [Package.Dependency] = []
 var senderDependencies: [Target.Dependency] = []
@@ -22,6 +24,27 @@ if useLiveKitWebRTC {
     )
     senderDependencies.append(.product(name: "LiveKitWebRTC", package: "webrtc-xcframework"))
     senderSwiftSettings.append(.define("HAS_LIVEKIT_WEBRTC"))
+} else if useLiveKitSDK {
+    dependencies.append(
+        .package(
+            url: "https://github.com/livekit/client-sdk-swift.git",
+            branch: "main"
+        )
+    )
+
+    targets.append(
+        .executableTarget(
+            name: "LiveKitSDKProbe",
+            dependencies: [
+                .product(name: "LiveKit", package: "client-sdk-swift")
+            ],
+            path: "Sources/LiveKitSDKProbe"
+        )
+    )
+
+    products.append(
+        .executable(name: "livekit-sdk-probe", targets: ["LiveKitSDKProbe"])
+    )
 } else if hasWebRTCFramework {
     targets.append(
         .binaryTarget(
@@ -42,14 +65,16 @@ targets.append(
     )
 )
 
+products.append(
+    .executable(name: "sender-mac", targets: ["SenderMac"])
+)
+
 let package = Package(
     name: "SenderMac",
     platforms: [
         .macOS(.v14)
     ],
-    products: [
-        .executable(name: "sender-mac", targets: ["SenderMac"])
-    ],
+    products: products,
     dependencies: dependencies,
     targets: targets
 )
