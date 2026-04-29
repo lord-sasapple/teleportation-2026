@@ -79,6 +79,8 @@ Go 側の `tools/pion-hevc-sender` は `--listen-frames` で TCP を受け、`--
 
 `receiver-mac` は `receiver-log` を signaling 経由で sender へ転送します。`scripts/run-pion-hevc-sender.sh` の Go/Pion ログに `receiver log [...]` として表示されるため、WAN 検証中に受信側 Mac の terminal を毎回覗かなくても inbound-rtp / candidate-pair / renderer の状態を確認できます。
 
+`receiver-mac` の viewer は受信 `CVPixelBuffer` を SceneKit sphere の texture に貼る 360 表示です。マウス / trackpad drag、`W` / `A` / `S` / `D`、矢印キーで視点操作できます。scroll は FOV 調整、`R` は正面 reset です。WebRTC の preview renderer view は球体操作を妨げるため、360 viewer では重ねて表示しません。
+
 ## HEVC/H.265 注意
 
 WebRTC の HEVC/H.265 対応は distribution と build flags に左右されます。HEVC negotiation が詰まった場合も、設計上は HEVC first を維持し、H.264 fallback で MVP を成立させます。現在は SDP の video payload 順を `H265` / `HEVC` / `H264` の順へ寄せる helper を用意しています。

@@ -8,9 +8,11 @@ import SceneKit
 final class Viewer360 {
     private var yaw: Double = 0
     private var pitch: Double = 0
+    private var fieldOfView: Double = 90
     private let ciContext = CIContext()
     private var frameCount: Int64 = 0
     private var lastFrameUpdateMs: Int64 = 0
+    private let minFrameUpdateIntervalMs: Int64 = 33
 
     private var window: NSWindow?
     private var sceneView: MouseLookSCNView?
@@ -34,35 +36,13 @@ final class Viewer360 {
     }
 
     func showPreviewRendererView(_ rendererView: NSView) {
-        setupWindowIfNeeded()
-
-        guard let sceneView else {
-            Logger.warn("preview renderer view を表示できません: sceneView がありません")
-            return
-        }
-
-        if rendererView.superview !== sceneView {
-            rendererView.removeFromSuperview()
-            rendererView.translatesAutoresizingMaskIntoConstraints = false
-            rendererView.wantsLayer = true
-            rendererView.layer?.zPosition = 100
-            sceneView.addSubview(rendererView)
-
-            NSLayoutConstraint.activate([
-                rendererView.leadingAnchor.constraint(equalTo: sceneView.leadingAnchor),
-                rendererView.trailingAnchor.constraint(equalTo: sceneView.trailingAnchor),
-                rendererView.topAnchor.constraint(equalTo: sceneView.topAnchor),
-                rendererView.bottomAnchor.constraint(equalTo: sceneView.bottomAnchor)
-            ])
-            Logger.info("preview renderer view を viewer に埋め込みました")
-        }
-
-        window?.makeKeyAndOrderFront(nil)
+        _ = rendererView
+        Logger.info("preview renderer view は 360 viewer では使用しません")
     }
 
     func updateFrame(_ pixelBuffer: CVPixelBuffer) {
         let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
-        if nowMs - lastFrameUpdateMs < 66 {
+        if nowMs - lastFrameUpdateMs < minFrameUpdateIntervalMs {
             return
         }
         lastFrameUpdateMs = nowMs
@@ -126,6 +106,12 @@ final class Viewer360 {
         view.onDrag = { [weak self] dx, dy in
             self?.onMouseDrag(deltaX: dx, deltaY: dy)
         }
+        view.onZoom = { [weak self] delta in
+            self?.onZoom(delta: delta)
+        }
+        view.onReset = { [weak self] in
+            self?.resetCamera()
+        }
         self.sceneView = view
 
         let window = NSWindow(
@@ -146,6 +132,20 @@ final class Viewer360 {
         yaw += deltaX * 0.005
         pitch += deltaY * 0.005
         pitch = max(-1.5, min(1.5, pitch))
+        updateCamera()
+    }
+
+    private func onZoom(delta: Double) {
+        fieldOfView += delta * 0.25
+        fieldOfView = max(45, min(110, fieldOfView))
+        cameraNode?.camera?.fieldOfView = fieldOfView
+    }
+
+    private func resetCamera() {
+        yaw = 0
+        pitch = 0
+        fieldOfView = 90
+        cameraNode?.camera?.fieldOfView = fieldOfView
         updateCamera()
     }
 
@@ -189,10 +189,22 @@ final class Viewer360 {
 
 final class MouseLookSCNView: SCNView {
     var onDrag: ((Double, Double) -> Void)?
+    var onZoom: ((Double) -> Void)?
+    var onReset: (() -> Void)?
 
     private var previousPoint: NSPoint?
 
+    override var acceptsFirstResponder: Bool {
+        true
+    }
+
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        window?.makeFirstResponder(self)
+    }
+
     override func mouseDown(with event: NSEvent) {
+        window?.makeFirstResponder(self)
         previousPoint = convert(event.locationInWindow, from: nil)
     }
 
@@ -209,6 +221,64 @@ final class MouseLookSCNView: SCNView {
     }
 
     override func mouseUp(with event: NSEvent) {
+        _ = event
         previousPoint = nil
+    }
+
+    override func rightMouseDown(with event: NSEvent) {
+        mouseDown(with: event)
+    }
+
+    override func rightMouseDragged(with event: NSEvent) {
+        mouseDragged(with: event)
+    }
+
+    override func rightMouseUp(with event: NSEvent) {
+        mouseUp(with: event)
+    }
+
+    override func otherMouseDown(with event: NSEvent) {
+        mouseDown(with: event)
+    }
+
+    override func otherMouseDragged(with event: NSEvent) {
+        mouseDragged(with: event)
+    }
+
+    override func otherMouseUp(with event: NSEvent) {
+        mouseUp(with: event)
+    }
+
+    override func scrollWheel(with event: NSEvent) {
+        onZoom?(Double(event.scrollingDeltaY))
+    }
+
+    override func keyDown(with event: NSEvent) {
+        switch event.keyCode {
+        case 0:
+            onDrag?(-24, 0)
+        case 1:
+            onDrag?(0, -24)
+        case 2:
+            onDrag?(24, 0)
+        case 13:
+            onDrag?(0, 24)
+        case 15:
+            onReset?()
+        case 27:
+            onZoom?(8)
+        case 24:
+            onZoom?(-8)
+        case 123:
+            onDrag?(-24, 0)
+        case 124:
+            onDrag?(24, 0)
+        case 125:
+            onDrag?(0, -24)
+        case 126:
+            onDrag?(0, 24)
+        default:
+            super.keyDown(with: event)
+        }
     }
 }

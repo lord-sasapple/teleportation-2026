@@ -17,7 +17,11 @@ macOS 上で低遅延 WebRTC 受信を行う実験用ネイティブ受信アプ
 - 受信 WebRTC アダプタ境界
 	- `LiveKitReceiverWebRTCAdapter`（livekit 有効時）
 	- `NativeReceiverWebRTCAdapter`（fallback）
-- 360 viewer の基礎 (`Viewer360`) を追加
+- SceneKit sphere による 360 viewer (`Viewer360`)
+	- マウス / trackpad のドラッグで視点操作
+	- `W` / `A` / `S` / `D` と矢印キーで視点操作
+	- scroll で FOV 調整、`R` で正面へ reset
+	- 受信 frame を 30fps 相当で texture 更新
 
 ## ビルド
 
@@ -59,9 +63,8 @@ WEBRTC_PROVIDER=livekit swift run receiver-mac \
 
 ## 低遅延・高画質のための次段実装
 
-1. `LiveKitReceiverWebRTCAdapter` に VideoTrack 受信コールバックを接続
-2. 受信フレームを `CVPixelBuffer` として `Viewer360` に受け渡し
-3. `Viewer360` を Metal/SceneKit 実表示へ拡張し、equirectangular sphere 表示を実装
-4. `DesktopWebRTCClient` と `CWebRTCShim` を Objective-C++ bridge に差し替え、VideoToolbox 指標を露出
+1. receiver-mac の frame pacing / texture upload cost を継続計測
+2. Quest receiver と同じ 360 操作・投影前提へ寄せる
+3. `DesktopWebRTCClient` と `CWebRTCShim` を Objective-C++ bridge に差し替え、VideoToolbox 指標を露出
 
 この段階で、Quest を使わずに macOS だけで受信品質・低遅延挙動の検証が継続できます。ただし、このアプリを SFU や media relay の代替にしません。media path は sender-mac と receiver-mac の 1:1 P2P です。

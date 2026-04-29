@@ -32,10 +32,8 @@ final class ReceiverApp: @unchecked Sendable {
         webRTC.onLocalIceCandidate = { [weak self] candidate in
             self?.signalingClient.sendIceCandidate(candidate)
         }
-        webRTC.onPreviewRendererView = { [weak self] previewView in
-            Task { @MainActor [weak self] in
-                self?.viewer?.showPreviewRendererView(previewView)
-            }
+        webRTC.onPreviewRendererView = { _ in
+            Logger.info("preview renderer view は 360 viewer では使用しません")
         }
 
         webRTC.onDataChannelMessage = { [weak self] data in
