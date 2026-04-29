@@ -99,19 +99,30 @@ func run(ctx context.Context, cfg config) error {
 
 	pc.OnICEConnectionStateChange(func(state webrtc.ICEConnectionState) {
 		log.Printf("ICE connection state: %s", state.String())
+		if state == webrtc.ICEConnectionStateConnected ||
+			state == webrtc.ICEConnectionStateCompleted {
+			mediaReady.Store(true)
+			log.Printf("media ready: true")
+		}
+		if state == webrtc.ICEConnectionStateFailed ||
+			state == webrtc.ICEConnectionStateClosed {
+			mediaReady.Store(false)
+			log.Printf("media ready: false")
+		}
 	})
 	pc.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {
 		log.Printf("PeerConnection state: %s", state.String())
 		if state == webrtc.PeerConnectionStateConnected {
 			mediaReady.Store(true)
+			log.Printf("media ready: true")
 			if cfg.annexBFile != "" && h265Track != nil {
 				go streamAnnexBFile(ctx, h265Track, cfg.annexBFile, cfg.fps)
 			}
 		}
 		if state == webrtc.PeerConnectionStateFailed ||
-			state == webrtc.PeerConnectionStateClosed ||
-			state == webrtc.PeerConnectionStateDisconnected {
+			state == webrtc.PeerConnectionStateClosed {
 			mediaReady.Store(false)
+			log.Printf("media ready: false")
 		}
 	})
 	pc.OnICEGatheringStateChange(func(state webrtc.ICEGatheringState) {
@@ -593,6 +604,10 @@ func handleSignal(ctx context.Context, c *websocket.Conn, pc *webrtc.PeerConnect
 	case "answer":
 		log.Printf("signaling recv: answer")
 		logCodecLines("remote answer", msg.SDP)
+		if pc.SignalingState() != webrtc.SignalingStateHaveLocalOffer {
+			log.Printf("skip answer: signalingState=%s", pc.SignalingState())
+			return nil
+		}
 		if err := pc.SetRemoteDescription(webrtc.SessionDescription{
 			Type: webrtc.SDPTypeAnswer,
 			SDP:  msg.SDP,

@@ -41,6 +41,12 @@ if [[ "$CLEAN_STALE_FRAME_LISTENER" == "1" ]] && command -v lsof >/dev/null 2>&1
     kill $STALE_PIDS >/dev/null 2>&1 || true
     sleep 1
   fi
+  STILL_LISTENING="$(lsof -tiTCP:"$FRAME_PORT" -sTCP:LISTEN 2>/dev/null || true)"
+  if [[ -n "$STILL_LISTENING" ]]; then
+    echo "error: $PION_FRAME_SOCKET is still in use by PID(s): $STILL_LISTENING"
+    echo "try: kill $STILL_LISTENING"
+    exit 1
+  fi
 fi
 
 echo "== Teleportation Pion HEVC sender =="
