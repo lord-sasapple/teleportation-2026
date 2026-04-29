@@ -77,6 +77,9 @@ final class CapturePipeline: NSObject, AVCaptureVideoDataOutputSampleBufferDeleg
         }
 
         if let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) {
+            if currentSequence == 1 || currentSequence % Int64(max(config.logEveryFrames, 1)) == 0 {
+                Logger.info("capture sampleBuffer size: seq=\(currentSequence) \(CVPixelBufferGetWidth(imageBuffer))x\(CVPixelBufferGetHeight(imageBuffer))")
+            }
             let presentationTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
             let presentationTimeNs = presentationTime.seconds.isFinite ? Int64(presentationTime.seconds * 1_000_000_000) : Int64(captureTimeMs * 1_000_000)
             let rawFrame = RawVideoFrame(
@@ -99,7 +102,6 @@ final class CapturePipeline: NSObject, AVCaptureVideoDataOutputSampleBufferDeleg
 
     private func configureSession(device: AVCaptureDevice) throws {
         session.beginConfiguration()
-
         let input: AVCaptureDeviceInput
         do {
             input = try AVCaptureDeviceInput(device: device)
