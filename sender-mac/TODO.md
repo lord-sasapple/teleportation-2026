@@ -16,14 +16,19 @@
 - [x] encoded frame callback bridge
 - [x] optional WebRTC.xcframework SwiftPM binary target wiring
 - [x] native WebRTC link-probe adapter skeleton
+- [x] raw CVPixelBuffer frame bridge to WebRTC adapter
+- [x] native PeerConnection skeleton
+- [x] native RTCDataChannel timestamp send skeleton
+- [x] local offer / remote answer / ICE signaling skeleton
+- [x] SDP HEVC/H.265 first payload ordering helper
 - [ ] Xcode macOS app bundle
 - [ ] Info.plist camera usage description
 - [x] libwebrtc native dependency strategy
 - [ ] acquire/build macOS-compatible WebRTC.xcframework
-- [ ] libwebrtc PeerConnection
-- [ ] codec preference HEVC first
-- [ ] encoded frame bridge into libwebrtc video source
-- [ ] DataChannel latency message send over native libwebrtc
+- [ ] compile native adapter against the chosen WebRTC.xcframework
+- [ ] verify RTCPeerConnectionFactory / RTCVideoSource APIs for selected WebRTC build
+- [ ] verify HEVC/H.265 support in selected WebRTC build
+- [ ] DataChannel latency message end-to-end with receiver
 - [ ] SenderStatsMonitor
 - [ ] SDP codec negotiation logging
 - [ ] selected codec stats logging

@@ -9,15 +9,18 @@ final class CapturePipeline: NSObject, AVCaptureVideoDataOutputSampleBufferDeleg
     private let encoder: VideoEncoder
     private var sequence: Int64 = 0
     private var isRunning = false
+    private var rawFrameHandler: (@Sendable (RawVideoFrame) -> Void)?
     private var stopHandler: (@Sendable () -> Void)?
 
     init(
         config: AppConfig,
         device: AVCaptureDevice,
+        rawFrameHandler: (@Sendable (RawVideoFrame) -> Void)? = nil,
         encodedFrameHandler: (@Sendable (EncodedVideoFrame) -> Void)? = nil,
         stopHandler: (@Sendable () -> Void)? = nil
     ) throws {
         self.config = config
+        self.rawFrameHandler = rawFrameHandler
         self.stopHandler = stopHandler
 
         let dimensions = CMVideoFormatDescriptionGetDimensions(device.activeFormat.formatDescription)
@@ -57,6 +60,20 @@ final class CapturePipeline: NSObject, AVCaptureVideoDataOutputSampleBufferDeleg
 
         if currentSequence == 1 || currentSequence % Int64(max(config.logEveryFrames, 1)) == 0 {
             Logger.info("captured frame: seq=\(currentSequence) captureTimeMs=\(captureTimeMs)")
+        }
+
+        if let imageBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) {
+            let presentationTime = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+            let presentationTimeNs = presentationTime.seconds.isFinite ? Int64(presentationTime.seconds * 1_000_000_000) : Int64(captureTimeMs * 1_000_000)
+            let rawFrame = RawVideoFrame(
+                pixelBuffer: imageBuffer,
+                sequence: currentSequence,
+                captureTimeMs: captureTimeMs,
+                presentationTimeNs: presentationTimeNs,
+                width: Int32(CVPixelBufferGetWidth(imageBuffer)),
+                height: Int32(CVPixelBufferGetHeight(imageBuffer))
+            )
+            rawFrameHandler?(rawFrame)
         }
 
         encoder.encode(sampleBuffer: sampleBuffer, sequence: currentSequence, captureTimeMs: captureTimeMs)

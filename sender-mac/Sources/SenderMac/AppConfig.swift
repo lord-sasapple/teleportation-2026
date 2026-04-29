@@ -29,6 +29,7 @@ struct AppConfig {
     var listDevices: Bool = false
     var signalingBaseURL: URL?
     var roomId: String?
+    var iceServers: [String] = ["stun:stun.l.google.com:19302"]
 
     static func parse(arguments: [String] = CommandLine.arguments) throws -> AppConfig {
         var config = AppConfig()
@@ -81,6 +82,12 @@ struct AppConfig {
                 config.signalingBaseURL = url
             case "--room":
                 config.roomId = try value(after: arg)
+            case "--ice-server":
+                let server = try value(after: arg)
+                if config.iceServers == ["stun:stun.l.google.com:19302"] {
+                    config.iceServers.removeAll()
+                }
+                config.iceServers.append(server)
             case "--help", "-h":
                 throw ConfigError.helpRequested
             default:
@@ -115,6 +122,7 @@ struct AppConfig {
           --duration <seconds>           指定秒数で停止
           --signaling-url <wss://...>    signaling-worker の base URL
           --room <roomId>                signaling-worker roomId
+          --ice-server <url>             ICE server URL。複数指定可。既定: stun:stun.l.google.com:19302
 
         Examples:
           swift run sender-mac --list-devices
@@ -157,4 +165,3 @@ enum ConfigError: Error, CustomStringConvertible {
         }
     }
 }
-

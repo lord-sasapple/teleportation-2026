@@ -6,7 +6,8 @@
 
 MacBook M3 側:
 
-- VideoToolbox HEVC hardware encode を使う前提です。
+- WebRTC 送信経路では、選定した libwebrtc build の VideoToolbox HEVC hardware encode を使う前提です。
+- sender-mac には外部 `VTCompressionSession` の計測経路も残し、HEVC/H.265 と H.264 の hardware encode 可否と encode latency を確認します。
 - realtime encode を有効にします。
 - frame reordering は off にします。
 - B-frame なし相当の低遅延設定にします。
@@ -40,4 +41,3 @@ H.264 fallback は次の用途でも使います。
 WebRTC 実装によって HEVC/H.265 の扱いは難しい場合があります。SDP codec negotiation のログを必ず取れる設計にし、実際に選ばれた codec を stats overlay に表示します。
 
 HEVC で交渉やデコードに失敗した場合でも、設計、docs、型定義では HEVC first を維持します。そのうえで H.264 fallback で MVP を成立させ、TODO に HEVC 再検証項目を残します。
-

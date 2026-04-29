@@ -35,6 +35,10 @@ final class SenderSession: @unchecked Sendable {
         webRTC.stop()
     }
 
+    func handleRawFrame(_ frame: RawVideoFrame) {
+        webRTC.sendRawFrame(frame)
+    }
+
     func handleEncodedFrame(_ frame: EncodedVideoFrame) {
         webRTC.sendEncodedFrame(frame)
 

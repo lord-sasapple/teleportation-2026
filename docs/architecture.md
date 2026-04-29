@@ -12,7 +12,7 @@ flowchart LR
 
 ## 各コンポーネントの責務
 
-`sender-mac` は X5 を UVC カメラとして取得し、2880x1440 / 30fps / 2:1 equirectangular の映像を VideoToolbox で HEVC/H.265 低遅延ハードウェアエンコードします。H.264 fallback も残します。WebRTC PeerConnection を作り、Quest 3 へ P2P 送信します。
+`sender-mac` は X5 を UVC カメラとして取得し、2880x1440 / 30fps / 2:1 equirectangular の映像を WebRTC PeerConnection へ渡して Quest 3 へ P2P 送信します。WebRTC 送信経路では raw frame を libwebrtc の video source に渡し、選定した libwebrtc build の VideoToolbox encoder 経路で HEVC/H.265 を初手にします。外部 `VTCompressionSession` は HEVC/H.265 と H.264 の hardware encode 可否と encode latency を測る計測経路として残します。H.264 fallback も残します。
 
 `signaling-worker` は Cloudflare Workers + Durable Objects の WebSocket サーバーです。1 room = 1 Durable Object とし、sender と receiver の 2 接続だけを許可します。SDP、ICE candidate、軽量な遅延測定制御メッセージだけを中継します。
 
@@ -46,4 +46,3 @@ HEVC/H.265 は 360 度映像のような高解像度入力で H.264 より圧縮
 ## H.264 fallback を残す理由
 
 WebRTC 実装によって HEVC/H.265 の negotiation、packetization、decoder 経路が難しい場合があります。HEVC が成立しない場合でも MVP を止めないため、H.264 fallback を残します。H.264 は遅延基準値の比較にも使います。
-

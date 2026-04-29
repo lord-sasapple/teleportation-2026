@@ -1,5 +1,15 @@
 import CoreMedia
+import CoreVideo
 import Foundation
+
+struct RawVideoFrame: @unchecked Sendable {
+    let pixelBuffer: CVPixelBuffer
+    let sequence: Int64
+    let captureTimeMs: Int64
+    let presentationTimeNs: Int64
+    let width: Int32
+    let height: Int32
+}
 
 struct EncodedVideoFrame: @unchecked Sendable {
     let sampleBuffer: CMSampleBuffer
@@ -13,6 +23,7 @@ protocol WebRTCSenderAdapter: Sendable {
     func handleAnswer(sdp: String)
     func handleRemoteIceCandidate(_ candidate: IceCandidatePayload)
     func handlePeerLeft(role: SignalingRole)
+    func sendRawFrame(_ frame: RawVideoFrame)
     func sendEncodedFrame(_ frame: EncodedVideoFrame)
     func sendFrameTimestamp(_ message: FrameTimestampMessage)
 }
@@ -49,10 +60,16 @@ final class NativeWebRTCSenderUnavailableAdapter: WebRTCSenderAdapter, @unchecke
         Logger.info("peer-left を WebRTC adapter stub で受信しました: role=\(role.rawValue)")
     }
 
+    func sendRawFrame(_ frame: RawVideoFrame) {
+        if frame.sequence == 1 || frame.sequence % Int64(max(config.logEveryFrames, 1)) == 0 {
+            Logger.info("WebRTC raw frame source stub: seq=\(frame.sequence) \(frame.width)x\(frame.height) captureTimeMs=\(frame.captureTimeMs)")
+        }
+    }
+
     func sendEncodedFrame(_ frame: EncodedVideoFrame) {
         if !hasLoggedFrameBridge {
             hasLoggedFrameBridge = true
-            Logger.warn("encoded frame bridge は stub です。次タスクで CMSampleBuffer を libwebrtc video source へ接続します")
+            Logger.warn("encoded frame は現在 WebRTC 送信用ではなく VideoToolbox 計測用です。WebRTC 送信は raw frame source 経路を使います")
         }
 
         if frame.log.sequence == 1 || frame.log.sequence % Int64(max(config.logEveryFrames, 1)) == 0 {

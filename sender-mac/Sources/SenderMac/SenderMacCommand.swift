@@ -48,6 +48,9 @@ struct SenderMacCommand {
         let pipeline = try CapturePipeline(
             config: config,
             device: device,
+            rawFrameHandler: { frame in
+                senderSession.handleRawFrame(frame)
+            },
             encodedFrameHandler: { frame in
                 senderSession.handleEncodedFrame(frame)
             },
