@@ -21,6 +21,12 @@ if [[ -z "$ROOM" ]]; then
   exit 64
 fi
 
+cleanup() {
+  /usr/bin/pkill -f "SenderMac.app/Contents/MacOS/SenderMac" >/dev/null 2>&1 || true
+  /usr/bin/pkill -f "/SenderMac " >/dev/null 2>&1 || true
+}
+trap cleanup EXIT INT TERM
+
 echo "== Teleportation sender-only =="
 echo "room=$ROOM"
 echo "signaling=$SIGNALING_URL"
