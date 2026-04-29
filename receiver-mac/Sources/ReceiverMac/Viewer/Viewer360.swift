@@ -11,6 +11,7 @@ final class Viewer360 {
     private var fieldOfView: Double = 90
     private let ciContext = CIContext()
     private var frameCount: Int64 = 0
+    private var interactionCount: Int64 = 0
     private var lastFrameUpdateMs: Int64 = 0
     private let minFrameUpdateIntervalMs: Int64 = 33
 
@@ -99,6 +100,7 @@ final class Viewer360 {
         let frame = NSRect(x: 100, y: 100, width: 1280, height: 720)
         let view = MouseLookSCNView(frame: frame)
         view.scene = scene
+        view.pointOfView = cameraNode
         view.backgroundColor = NSColor.black
         view.allowsCameraControl = false
         view.rendersContinuously = true
@@ -133,6 +135,11 @@ final class Viewer360 {
         pitch += deltaY * 0.005
         pitch = max(-1.5, min(1.5, pitch))
         updateCamera()
+
+        interactionCount += 1
+        if interactionCount <= 3 {
+            Logger.info(String(format: "viewer camera moved: yaw=%.3f pitch=%.3f", yaw, pitch))
+        }
     }
 
     private func onZoom(delta: Double) {
@@ -193,8 +200,23 @@ final class MouseLookSCNView: SCNView {
     var onReset: (() -> Void)?
 
     private var previousPoint: NSPoint?
+    private var isMouseDragging = false
+
+    override init(frame frameRect: NSRect, options: [String: Any]? = nil) {
+        super.init(frame: frameRect, options: options)
+        installGestureRecognizers()
+    }
+
+    required init?(coder: NSCoder) {
+        super.init(coder: coder)
+        installGestureRecognizers()
+    }
 
     override var acceptsFirstResponder: Bool {
+        true
+    }
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
         true
     }
 
@@ -205,6 +227,7 @@ final class MouseLookSCNView: SCNView {
 
     override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
+        isMouseDragging = true
         previousPoint = convert(event.locationInWindow, from: nil)
     }
 
@@ -222,6 +245,7 @@ final class MouseLookSCNView: SCNView {
 
     override func mouseUp(with event: NSEvent) {
         _ = event
+        isMouseDragging = false
         previousPoint = nil
     }
 
@@ -279,6 +303,22 @@ final class MouseLookSCNView: SCNView {
             onDrag?(0, 24)
         default:
             super.keyDown(with: event)
+        }
+    }
+
+    private func installGestureRecognizers() {
+        let pan = NSPanGestureRecognizer(target: self, action: #selector(handlePan(_:)))
+        addGestureRecognizer(pan)
+    }
+
+    @objc private func handlePan(_ recognizer: NSPanGestureRecognizer) {
+        guard !isMouseDragging else { return }
+
+        window?.makeFirstResponder(self)
+        let translation = recognizer.translation(in: self)
+        if translation != .zero {
+            onDrag?(Double(translation.x), Double(translation.y))
+            recognizer.setTranslation(.zero, in: self)
         }
     }
 }
