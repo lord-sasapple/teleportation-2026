@@ -36,6 +36,7 @@ struct AppConfig {
     var roomId: String?
     var iceServers: [String] = ["stun:stun.l.google.com:19302"]
     var pionFrameSocket: String?
+    var requiredAspectRatio: AspectRatio?
 
     static func parse(arguments: [String] = CommandLine.arguments) throws -> AppConfig {
         var config = AppConfig()
@@ -60,6 +61,8 @@ struct AppConfig {
                 config.width = try Int32(Self.parseInt(try value(after: arg), option: arg))
             case "--height":
                 config.height = try Int32(Self.parseInt(try value(after: arg), option: arg))
+            case "--require-aspect-ratio":
+                config.requiredAspectRatio = try AspectRatio.parse(try value(after: arg), option: arg)
             case "--fps":
                 config.fps = try Int32(Self.parseInt(try value(after: arg), option: arg))
             case "--codec":
@@ -134,6 +137,7 @@ struct AppConfig {
           --builtin-camera               内蔵カメラを優先的に使用 (X5 なし時のテスト用)
           --width <px>                   既定: 2880
           --height <px>                  既定: 1440
+          --require-aspect-ratio <w:h>   capture format の縦横比を要求。X5 360 は 2:1
           --fps <fps>                    既定: 30
           --codec <hevc|h264>            既定: hevc
           --bitrate <bps>                既定: 18000000
@@ -173,6 +177,31 @@ struct AppConfig {
             throw ConfigError.invalidValue(option, "数値として解釈できません: \(rawValue)")
         }
         return value
+    }
+}
+
+struct AspectRatio {
+    let width: Int32
+    let height: Int32
+
+    var label: String {
+        "\(width):\(height)"
+    }
+
+    func matches(width actualWidth: Int32, height actualHeight: Int32) -> Bool {
+        Int64(actualWidth) * Int64(height) == Int64(actualHeight) * Int64(width)
+    }
+
+    static func parse(_ rawValue: String, option: String) throws -> AspectRatio {
+        let parts = rawValue.split(separator: ":", maxSplits: 1).map(String.init)
+        guard parts.count == 2,
+              let width = Int32(parts[0]),
+              let height = Int32(parts[1]),
+              width > 0,
+              height > 0 else {
+            throw ConfigError.invalidValue(option, "w:h 形式で指定してください。例: 2:1")
+        }
+        return AspectRatio(width: width, height: height)
     }
 }
 
