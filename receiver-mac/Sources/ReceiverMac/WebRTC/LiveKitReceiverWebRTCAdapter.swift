@@ -8,6 +8,7 @@ final class LiveKitReceiverWebRTCAdapter: NSObject, ReceiverWebRTCAdapter, @unch
     var onLocalAnswer: ((String) -> Void)?
     var onLocalIceCandidate: ((IceCandidatePayload) -> Void)?
     var onPreviewRendererView: ((NSView) -> Void)?
+    var onDataChannelMessage: ((Data) -> Void)?
     var onFrame: ((CVPixelBuffer) -> Void)?
 
     private let queue = DispatchQueue(label: "telepresence.receiver.livekit-webrtc")
@@ -420,11 +421,22 @@ extension LiveKitReceiverWebRTCAdapter: LKRTCPeerConnectionDelegate {
     }
 
     func peerConnection(_ peerConnection: LKRTCPeerConnection, didOpen dataChannel: LKRTCDataChannel) {
+        dataChannel.delegate = self
         Logger.info("receiver data channel opened: \(dataChannel.label)")
     }
 
     func peerConnection(_ peerConnection: LKRTCPeerConnection, didStartReceivingOn transceiver: LKRTCRtpTransceiver) {
         Logger.info("receiver didStartReceivingOnTransceiver: mid=\(transceiver.mid) mediaType=\(transceiver.mediaType.rawValue)")
+    }
+}
+
+extension LiveKitReceiverWebRTCAdapter: LKRTCDataChannelDelegate {
+    func dataChannelDidChangeState(_ dataChannel: LKRTCDataChannel) {
+        Logger.info("receiver DataChannel state changed: label=\(dataChannel.label) state=\(dataChannel.readyState.rawValue)")
+    }
+
+    func dataChannel(_ dataChannel: LKRTCDataChannel, didReceiveMessageWith buffer: LKRTCDataBuffer) {
+        onDataChannelMessage?(buffer.data)
     }
 }
 

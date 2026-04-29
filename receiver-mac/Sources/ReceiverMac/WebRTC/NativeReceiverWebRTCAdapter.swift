@@ -6,6 +6,7 @@ final class NativeReceiverWebRTCAdapter: ReceiverWebRTCAdapter {
     var onLocalAnswer: ((String) -> Void)?
     var onLocalIceCandidate: ((IceCandidatePayload) -> Void)?
     var onPreviewRendererView: ((NSView) -> Void)?
+    var onDataChannelMessage: ((Data) -> Void)?
     var onFrame: ((CVPixelBuffer) -> Void)?
 
     private let desktopClient: DesktopWebRTCClient

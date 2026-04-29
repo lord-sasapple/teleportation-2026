@@ -8,6 +8,8 @@ final class ReceiverApp: @unchecked Sendable {
     private var viewer: Viewer360?
     private var running = true
     private var receivedFrames: Int64 = 0
+    private var latestTimestamp: FrameTimestampMessage?
+    private var latestTimestampReceiveTimeMs: Int64 = 0
 
     init(config: AppConfig) {
         self.config = config
@@ -32,12 +34,25 @@ final class ReceiverApp: @unchecked Sendable {
             }
         }
 
+        webRTC.onDataChannelMessage = { [weak self] data in
+            self?.handleDataChannelMessage(data)
+        }
+
         webRTC.onFrame = { [weak self] pixelBuffer in
             guard let self else { return }
             self.receivedFrames += 1
             let frameCount = self.receivedFrames
+            let nowMs = Self.nowMs()
+
             if frameCount == 1 || frameCount % 30 == 0 {
-                Logger.info("frame received: count=\(frameCount) size=\(CVPixelBufferGetWidth(pixelBuffer))x\(CVPixelBufferGetHeight(pixelBuffer))")
+                if let ts = self.latestTimestamp {
+                    let captureToRenderApprox = nowMs - ts.captureTimeMs
+                    let sendToRenderApprox = nowMs - ts.sendTimeMs
+                    let dataToRenderApprox = nowMs - self.latestTimestampReceiveTimeMs
+                    Logger.info("frame received: count=\(frameCount) size=\(CVPixelBufferGetWidth(pixelBuffer))x\(CVPixelBufferGetHeight(pixelBuffer)) approxLatency captureToRender=\(captureToRenderApprox)ms sendToRender=\(sendToRenderApprox)ms dataToRender=\(dataToRenderApprox)ms tsSeq=\(ts.sequence)")
+                } else {
+                    Logger.info("frame received: count=\(frameCount) size=\(CVPixelBufferGetWidth(pixelBuffer))x\(CVPixelBufferGetHeight(pixelBuffer))")
+                }
             }
 
             let sendablePixelBuffer = SendablePixelBuffer(pixelBuffer)
@@ -69,6 +84,36 @@ final class ReceiverApp: @unchecked Sendable {
 
         statsLoop()
         waitUntilStopped()
+    }
+
+    private func handleDataChannelMessage(_ data: Data) {
+        guard let message = try? JSONDecoder().decode(FrameTimestampMessage.self, from: data) else {
+            if let text = String(data: data, encoding: .utf8) {
+                Logger.warn("receiver DataChannel unknown message: \(text)")
+            } else {
+                Logger.warn("receiver DataChannel unknown binary message: bytes=\(data.count)")
+            }
+            return
+        }
+
+        guard message.type == "frame-timestamp" else {
+            Logger.warn("receiver DataChannel unsupported message type=\(message.type)")
+            return
+        }
+
+        let nowMs = Self.nowMs()
+        latestTimestamp = message
+        latestTimestampReceiveTimeMs = nowMs
+
+        if message.sequence == 1 || message.sequence % 30 == 0 {
+            Logger.info(
+                "latency timestamp received: seq=\(message.sequence) captureToData=\(nowMs - message.captureTimeMs)ms sendToData=\(nowMs - message.sendTimeMs)ms encode=\(message.encodeEndTimeMs - message.encodeStartTimeMs)ms"
+            )
+        }
+    }
+
+    private static func nowMs() -> Int64 {
+        Int64(Date().timeIntervalSince1970 * 1000)
     }
 
     private func handleSignalingMessage(_ message: SignalingServerMessage) {

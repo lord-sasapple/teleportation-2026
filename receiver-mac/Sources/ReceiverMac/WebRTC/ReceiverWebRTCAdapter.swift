@@ -7,6 +7,7 @@ protocol ReceiverWebRTCAdapter: AnyObject {
     var onLocalIceCandidate: ((IceCandidatePayload) -> Void)? { get set }
     var onFrame: ((CVPixelBuffer) -> Void)? { get set }
     var onPreviewRendererView: ((NSView) -> Void)? { get set }
+    var onDataChannelMessage: ((Data) -> Void)? { get set }
 
     func start()
     func stop()
