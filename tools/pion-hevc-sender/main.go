@@ -34,6 +34,11 @@ type candidateValue struct {
 	SDPMLineIndex uint16 `json:"sdpMLineIndex,omitempty"`
 }
 
+type queuedFrame struct {
+	data     []byte
+	keyframe bool
+}
+
 type config struct {
 	room         string
 	signalingURL string
@@ -312,7 +317,7 @@ func handleFrameConn(ctx context.Context, track *webrtc.TrackLocalStaticSample, 
 		queueSize = 1
 	}
 
-	frameQueue := make(chan []byte, queueSize)
+	frameQueue := make(chan queuedFrame, queueSize)
 	readerDone := make(chan struct{})
 
 	go func() {
@@ -321,6 +326,7 @@ func handleFrameConn(ctx context.Context, track *webrtc.TrackLocalStaticSample, 
 
 		var received uint64
 		var dropped uint64
+		var keyframes uint64
 		header := make([]byte, 4)
 
 		for {
@@ -355,8 +361,15 @@ func handleFrameConn(ctx context.Context, track *webrtc.TrackLocalStaticSample, 
 			}
 
 			received++
+			queued := queuedFrame{
+				data:     frame,
+				keyframe: isH265RandomAccessFrame(frame),
+			}
+			if queued.keyframe {
+				keyframes++
+			}
 			select {
-			case frameQueue <- frame:
+			case frameQueue <- queued:
 			default:
 				select {
 				case <-frameQueue:
@@ -365,7 +378,7 @@ func handleFrameConn(ctx context.Context, track *webrtc.TrackLocalStaticSample, 
 				}
 
 				select {
-				case frameQueue <- frame:
+				case frameQueue <- queued:
 				case <-ctx.Done():
 					log.Printf("frame input stopped: received=%d dropped=%d queue=%d", received, dropped, len(frameQueue))
 					return
@@ -373,7 +386,7 @@ func handleFrameConn(ctx context.Context, track *webrtc.TrackLocalStaticSample, 
 			}
 
 			if received%30 == 0 {
-				log.Printf("frame input received=%d dropped=%d queue=%d", received, dropped, len(frameQueue))
+				log.Printf("frame input received=%d dropped=%d keyframes=%d queue=%d", received, dropped, keyframes, len(frameQueue))
 			}
 		}
 	}()
@@ -388,6 +401,7 @@ func handleFrameConn(ctx context.Context, track *webrtc.TrackLocalStaticSample, 
 
 	var sent uint64
 	var skipped uint64
+	var sentKeyframes uint64
 	var lastBytes int
 
 	for {
@@ -400,6 +414,7 @@ func handleFrameConn(ctx context.Context, track *webrtc.TrackLocalStaticSample, 
 			return
 		case <-ticker.C:
 			var frame []byte
+			var keyframe bool
 			for {
 				select {
 				case queuedFrame, ok := <-frameQueue:
@@ -407,7 +422,12 @@ func handleFrameConn(ctx context.Context, track *webrtc.TrackLocalStaticSample, 
 						log.Printf("frame stream stopped: sent=%d skipped=%d queue=%d", sent, skipped, len(frameQueue))
 						return
 					}
-					frame = queuedFrame
+					if frame == nil || queuedFrame.keyframe {
+						frame = queuedFrame.data
+						keyframe = queuedFrame.keyframe
+					} else if !keyframe {
+						frame = queuedFrame.data
+					}
 				default:
 					goto drained
 				}
@@ -435,11 +455,25 @@ func handleFrameConn(ctx context.Context, track *webrtc.TrackLocalStaticSample, 
 			}
 
 			sent++
+			if keyframe {
+				sentKeyframes++
+			}
 			if sent%30 == 0 {
-				log.Printf("frame samples sent=%d lastBytes=%d queue=%d skipped=%d", sent, lastBytes, len(frameQueue), skipped)
+				log.Printf("frame samples sent=%d keyframes=%d lastBytes=%d keyframe=%t queue=%d skipped=%d", sent, sentKeyframes, lastBytes, keyframe, len(frameQueue), skipped)
 			}
 		}
 	}
+}
+
+func isH265RandomAccessFrame(frame []byte) bool {
+	nals := splitAnnexBNALUnits(frame)
+	for _, nal := range nals {
+		nalType := h265NALType(nal)
+		if nalType >= 16 && nalType <= 21 {
+			return true
+		}
+	}
+	return false
 }
 
 func streamAnnexBFile(ctx context.Context, track *webrtc.TrackLocalStaticSample, path string, fps int) {

@@ -10,6 +10,7 @@ DURATION="${DURATION:-600}"
 WIDTH="${WIDTH:-2880}"
 HEIGHT="${HEIGHT:-1440}"
 FPS="${FPS:-30}"
+SEND_FPS="${SEND_FPS:-$FPS}"
 BITRATE="${BITRATE:-6000000}"
 QUEUE_SIZE="${QUEUE_SIZE:-3}"
 PION_FRAME_SOCKET="${PION_FRAME_SOCKET:-127.0.0.1:5005}"
@@ -17,6 +18,7 @@ WEBRTC_PROVIDER="${WEBRTC_PROVIDER:-livekit}"
 DEVICE_ID="${DEVICE_ID:-}"
 USE_BUILTIN_CAMERA="${USE_BUILTIN_CAMERA:-0}"
 REQUIRE_ASPECT_RATIO="${REQUIRE_ASPECT_RATIO:-2:1}"
+KEYFRAME_INTERVAL="${KEYFRAME_INTERVAL:-2}"
 CLEAN_STALE_FRAME_LISTENER="${CLEAN_STALE_FRAME_LISTENER:-1}"
 
 if [[ -z "$ROOM" ]]; then
@@ -52,8 +54,8 @@ fi
 echo "== Teleportation Pion HEVC sender =="
 echo "room=$ROOM"
 echo "signaling=$SIGNALING_URL"
-echo "frames=$PION_FRAME_SOCKET queue-size=$QUEUE_SIZE"
-echo "codec=hevc ${WIDTH}x${HEIGHT}@${FPS}fps bitrate=$BITRATE duration=${DURATION}s aspect=$REQUIRE_ASPECT_RATIO"
+echo "frames=$PION_FRAME_SOCKET queue-size=$QUEUE_SIZE send-fps=$SEND_FPS"
+echo "codec=hevc ${WIDTH}x${HEIGHT}@${FPS}fps bitrate=$BITRATE keyframe-interval=${KEYFRAME_INTERVAL}s duration=${DURATION}s aspect=$REQUIRE_ASPECT_RATIO"
 
 (
   cd "$ROOT_DIR/tools/pion-hevc-sender"
@@ -62,7 +64,7 @@ echo "codec=hevc ${WIDTH}x${HEIGHT}@${FPS}fps bitrate=$BITRATE duration=${DURATI
     --signaling-url "$SIGNALING_URL" \
     --duration "$DURATION" \
     --listen-frames "$PION_FRAME_SOCKET" \
-    --fps "$FPS" \
+    --fps "$SEND_FPS" \
     --queue-size "$QUEUE_SIZE"
 ) &
 PION_PID=$!
@@ -79,6 +81,7 @@ SENDER_ARGS=(
   --require-aspect-ratio "$REQUIRE_ASPECT_RATIO"
   --fps "$FPS"
   --bitrate "$BITRATE"
+  --keyframe-interval "$KEYFRAME_INTERVAL"
   --duration "$DURATION"
   --log-every 30
   --pion-frame-socket "$PION_FRAME_SOCKET"
