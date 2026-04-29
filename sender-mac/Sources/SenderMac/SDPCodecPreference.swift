@@ -26,6 +26,74 @@ enum SDPCodecPreference {
         return lines.joined(separator: lineSeparator)
     }
 
+
+    static func addVideoBandwidthHints(
+        to sdp: String,
+        startKbps: Int,
+        minKbps: Int,
+        maxKbps: Int
+    ) -> String {
+        let lineSeparator = sdp.contains("\r\n") ? "\r\n" : "\n"
+        var lines = sdp.components(separatedBy: lineSeparator)
+
+        guard let mediaIndex = lines.firstIndex(where: { $0.hasPrefix("m=video ") }) else {
+            return sdp
+        }
+
+        // Remove old video-level bandwidth hints immediately after m=video.
+        var removeIndexes: [Int] = []
+        var i = mediaIndex + 1
+        while i < lines.count {
+            let line = lines[i]
+            if line.hasPrefix("m=") {
+                break
+            }
+            if line.hasPrefix("b=AS:") || line.hasPrefix("b=TIAS:") {
+                removeIndexes.append(i)
+            }
+            i += 1
+        }
+        for index in removeIndexes.reversed() {
+            lines.remove(at: index)
+        }
+
+        lines.insert("b=TIAS:\(maxKbps * 1000)", at: mediaIndex + 1)
+        lines.insert("b=AS:\(maxKbps)", at: mediaIndex + 1)
+
+        let payloadNameById = parsePayloadNames(lines: lines)
+        let h264Payloads = payloadNameById
+            .filter { $0.value.uppercased().contains("H264") }
+            .map(\.key)
+
+        for payload in h264Payloads {
+            if let fmtpIndex = lines.firstIndex(where: { $0.hasPrefix("a=fmtp:\(payload) ") }) {
+                var line = lines[fmtpIndex]
+                let params = [
+                    "x-google-start-bitrate=\(startKbps)",
+                    "x-google-min-bitrate=\(minKbps)",
+                    "x-google-max-bitrate=\(maxKbps)"
+                ]
+
+                for param in params {
+                    let key = param.split(separator: "=").first.map(String.init) ?? param
+                    if !line.contains(key) {
+                        line += ";\(param)"
+                    }
+                }
+
+                lines[fmtpIndex] = line
+            } else if let rtpmapIndex = lines.firstIndex(where: { $0.hasPrefix("a=rtpmap:\(payload) ") }) {
+                lines.insert(
+                    "a=fmtp:\(payload) x-google-start-bitrate=\(startKbps);x-google-min-bitrate=\(minKbps);x-google-max-bitrate=\(maxKbps)",
+                    at: rtpmapIndex + 1
+                )
+            }
+        }
+
+        return lines.joined(separator: lineSeparator)
+    }
+
+
     private static func parsePayloadNames(lines: [String]) -> [String: String] {
         var result: [String: String] = [:]
 

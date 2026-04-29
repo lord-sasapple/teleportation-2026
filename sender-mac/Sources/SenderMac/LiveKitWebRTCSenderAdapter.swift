@@ -324,10 +324,17 @@ final class LiveKitWebRTCSenderAdapter: NSObject, WebRTCSenderAdapter, @unchecke
 
             self.codecStatsLogger.logSdpOffer(description.sdp)
 
-            let preferredSDP = SDPCodecPreference.preferVideoCodecs(
+            let codecPreferredSDP = SDPCodecPreference.preferVideoCodecs(
                 in: description.sdp,
                 first: ["H265", "HEVC", "H264"]
             )
+            let preferredSDP = SDPCodecPreference.addVideoBandwidthHints(
+                to: codecPreferredSDP,
+                startKbps: max(self.config.bitrate / 1000, 1_000),
+                minKbps: max(self.config.bitrate / 2000, 1_000),
+                maxKbps: max(self.config.bitrate / 1000, 1_000)
+            )
+            Logger.info("SDP bandwidth hints を追加しました: start=\(max(self.config.bitrate / 1000, 1_000))kbps min=\(max(self.config.bitrate / 2000, 1_000))kbps max=\(max(self.config.bitrate / 1000, 1_000))kbps")
             self.codecStatsLogger.logCodecPreference(
                 preferred: ["H265", "HEVC", "H264"],
                 sdp: preferredSDP
