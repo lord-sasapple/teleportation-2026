@@ -61,6 +61,20 @@ WEBRTC_PROVIDER=livekit DURATION=60 ./Scripts/run-codec-comparison.sh
 
 LiveKitWebRTC で HEVC/H.265 送信 codec が見えない場合の検証経路として、sender-mac の VideoToolbox HEVC hardware encode 出力を localhost TCP で Go/Pion へ渡し、Pion から WebRTC H.265 P2P 送信します。`--pion-frame-socket` 指定時の sender-mac は Pion 専用モードになり、LiveKitWebRTC / signaling は起動しません。
 
+友達の Mac で receiver を先に起動します。
+
+```bash
+CODEC=hevc DURATION=600 bash scripts/run-remote-receiver.sh pion-routeb-wan-001
+```
+
+自分の Mac では Go/Pion と sender-mac をまとめて起動できます。
+
+```bash
+DEVICE_ID="0x1000002e1a0005" ./scripts/run-pion-hevc-sender.sh pion-routeb-wan-001
+```
+
+手動で分けて起動する場合:
+
 ```bash
 cd tools/pion-hevc-sender
 go run . --room pion-routeb-wan-001 --duration 600 --listen-frames 127.0.0.1:5005 --fps 30 --queue-size 3

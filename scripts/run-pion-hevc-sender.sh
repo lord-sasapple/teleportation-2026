@@ -1,0 +1,75 @@
+#!/bin/bash
+set -euo pipefail
+
+export PATH="/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:${PATH:-}"
+
+ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+SIGNALING_URL="${SIGNALING_URL:-wss://x5-webrtc-signaling.lord-sasapple.workers.dev}"
+ROOM="${1:-${ROOM:-}}"
+DURATION="${DURATION:-600}"
+WIDTH="${WIDTH:-1920}"
+HEIGHT="${HEIGHT:-1080}"
+FPS="${FPS:-30}"
+BITRATE="${BITRATE:-6000000}"
+QUEUE_SIZE="${QUEUE_SIZE:-3}"
+PION_FRAME_SOCKET="${PION_FRAME_SOCKET:-127.0.0.1:5005}"
+WEBRTC_PROVIDER="${WEBRTC_PROVIDER:-livekit}"
+DEVICE_ID="${DEVICE_ID:-}"
+USE_BUILTIN_CAMERA="${USE_BUILTIN_CAMERA:-0}"
+
+if [[ -z "$ROOM" ]]; then
+  echo "usage: ./scripts/run-pion-hevc-sender.sh <room-id>"
+  echo "example: ./scripts/run-pion-hevc-sender.sh pion-masato-wan-001"
+  exit 64
+fi
+
+cleanup() {
+  if [[ -n "${PION_PID:-}" ]] && kill -0 "$PION_PID" >/dev/null 2>&1; then
+    kill "$PION_PID" >/dev/null 2>&1 || true
+    wait "$PION_PID" >/dev/null 2>&1 || true
+  fi
+}
+trap cleanup EXIT INT TERM
+
+echo "== Teleportation Pion HEVC sender =="
+echo "room=$ROOM"
+echo "signaling=$SIGNALING_URL"
+echo "frames=$PION_FRAME_SOCKET queue-size=$QUEUE_SIZE"
+echo "codec=hevc ${WIDTH}x${HEIGHT}@${FPS}fps bitrate=$BITRATE duration=${DURATION}s"
+
+(
+  cd "$ROOT_DIR/tools/pion-hevc-sender"
+  go run . \
+    --room "$ROOM" \
+    --signaling-url "$SIGNALING_URL" \
+    --duration "$DURATION" \
+    --listen-frames "$PION_FRAME_SOCKET" \
+    --fps "$FPS" \
+    --queue-size "$QUEUE_SIZE"
+) &
+PION_PID=$!
+
+sleep 2
+if ! kill -0 "$PION_PID" >/dev/null 2>&1; then
+  wait "$PION_PID"
+fi
+
+SENDER_ARGS=(
+  --codec hevc
+  --width "$WIDTH"
+  --height "$HEIGHT"
+  --fps "$FPS"
+  --bitrate "$BITRATE"
+  --duration "$DURATION"
+  --log-every 30
+  --pion-frame-socket "$PION_FRAME_SOCKET"
+)
+
+if [[ "$USE_BUILTIN_CAMERA" == "1" ]]; then
+  SENDER_ARGS+=(--builtin-camera)
+elif [[ -n "$DEVICE_ID" ]]; then
+  SENDER_ARGS+=(--device-id "$DEVICE_ID")
+fi
+
+cd "$ROOT_DIR/sender-mac"
+WEBRTC_PROVIDER="$WEBRTC_PROVIDER" /usr/bin/xcrun swift run sender-mac "${SENDER_ARGS[@]}"
