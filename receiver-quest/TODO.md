@@ -1,15 +1,24 @@
 # receiver-quest TODO
 
-- [ ] Unity project setup
-- [ ] OpenXR setup
-- [ ] Android libwebrtc integration
-- [ ] HEVC codec negotiation
-- [ ] MediaCodec decoder name logging
+- [x] Unity project skeleton
+- [x] OpenXR package setup
+- [x] receiver role signaling client
+- [x] Android libwebrtc bridge boundary
+- [x] Editor stub receiver
+- [x] preferred codec enum with HEVC first / H.264 fallback
+- [x] MediaCodec decoder name overlay field
+- [x] software decoder warning field
+- [ ] native Android libwebrtc integration
+- [ ] HEVC codec negotiation against sender-mac
+- [ ] MediaCodec hardware decoder creation
+- [ ] MediaCodec decoder name logging from Android native path
 - [ ] SurfaceTexture / external texture bridge
-- [ ] inside-out sphere renderer
-- [ ] LatencyOverlay
-- [ ] WebRTC stats polling
-- [ ] DataChannel timestamp receiver
-- [ ] H.264 fallback path
-- [ ] glass-to-glass measurement guide
-
+- [x] inside-out sphere renderer
+- [x] LatencyOverlay
+- [x] WebRTC stats polling interface
+- [x] DataChannel timestamp receiver
+- [x] `frame-latency-report` generation
+- [ ] real selected candidate pair / jitter / frame stats from libwebrtc
+- [ ] H.264 fallback path against sender-mac
+- [x] glass-to-glass measurement guide
+- [ ] Quest 3 device build and run

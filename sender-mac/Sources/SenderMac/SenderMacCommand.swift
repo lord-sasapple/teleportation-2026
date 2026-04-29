@@ -25,6 +25,11 @@ struct SenderMacCommand {
     private static func run(config: AppConfig) throws {
         Logger.info("sender-mac を起動します: codec=\(config.codec.displayName) target=\(config.width)x\(config.height)@\(config.fps)fps bitrate=\(config.bitrate)bps")
 
+        if config.signalingOnly {
+            try runSignalingOnly(config: config)
+            return
+        }
+
         guard CameraAuthorization.request() else {
             throw SenderError.cameraPermissionDenied
         }
@@ -73,6 +78,30 @@ struct SenderMacCommand {
 
         interruptSource.cancel()
         Logger.info("sender-mac を終了しました")
+    }
+
+    private static func runSignalingOnly(config: AppConfig) throws {
+        guard config.signalingBaseURL != nil, let roomId = config.roomId, !roomId.isEmpty else {
+            throw ConfigError.invalidValue("--signaling-only", "--signaling-url と --room を指定してください")
+        }
+
+        let senderSession = SenderSession(config: config)
+        senderSession.start()
+
+        let stopController = StopController()
+        stopController.senderSession = senderSession
+
+        let interruptSource = makeInterruptSource(stopController: stopController)
+        let durationSeconds = config.durationSeconds ?? 10
+        Logger.info("signaling-only mode で起動しました: room=\(roomId) duration=\(durationSeconds)s")
+        DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + durationSeconds) {
+            Logger.info("signaling-only duration に到達しました: \(durationSeconds)s")
+            stopController.requestStop(reason: "signaling-only duration に到達")
+        }
+
+        stopController.waitUntilStopped()
+        interruptSource.cancel()
+        Logger.info("sender-mac signaling-only を終了しました")
     }
 
     private static func makeInterruptSource(stopController: StopController) -> DispatchSourceSignal {

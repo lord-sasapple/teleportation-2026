@@ -27,6 +27,7 @@ struct AppConfig {
     var maxFrames: Int?
     var durationSeconds: Double?
     var listDevices: Bool = false
+    var signalingOnly: Bool = false
     var signalingBaseURL: URL?
     var roomId: String?
     var iceServers: [String] = ["stun:stun.l.google.com:19302"]
@@ -74,6 +75,8 @@ struct AppConfig {
                 config.durationSeconds = try Self.parseDouble(try value(after: arg), option: arg)
             case "--list-devices":
                 config.listDevices = true
+            case "--signaling-only":
+                config.signalingOnly = true
             case "--signaling-url":
                 let rawURL = try value(after: arg)
                 guard let url = URL(string: rawURL) else {
@@ -120,6 +123,7 @@ struct AppConfig {
           --log-every <frames>           既定: 30
           --max-frames <count>           指定フレーム数で停止
           --duration <seconds>           指定秒数で停止
+          --signaling-only               カメラを使わず signaling / WebRTC 初期化だけ起動
           --signaling-url <wss://...>    signaling-worker の base URL
           --room <roomId>                signaling-worker roomId
           --ice-server <url>             ICE server URL。複数指定可。既定: stun:stun.l.google.com:19302
@@ -128,6 +132,7 @@ struct AppConfig {
           swift run sender-mac --list-devices
           swift run sender-mac --codec hevc --duration 10
           swift run sender-mac --codec h264 --bitrate 16000000 --max-frames 300
+          swift run sender-mac --signaling-only --signaling-url wss://example.workers.dev --room smoke --duration 5
         """
     }
 
