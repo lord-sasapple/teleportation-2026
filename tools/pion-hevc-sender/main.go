@@ -2,10 +2,13 @@ package main
 
 import (
 	"context"
+	"encoding/binary"
 	"encoding/json"
 	"flag"
 	"fmt"
+	"io"
 	"log"
+	"net"
 	"os"
 	"strings"
 	"sync/atomic"
@@ -36,6 +39,7 @@ type config struct {
 	signalingURL string
 	duration     time.Duration
 	annexBFile   string
+	listenFrames string
 	fps          int
 }
 
@@ -47,6 +51,7 @@ func main() {
 	log.Printf("signaling=%s", cfg.signalingURL)
 	log.Printf("duration=%s", cfg.duration)
 	log.Printf("annexb-file=%s", cfg.annexBFile)
+	log.Printf("listen-frames=%s", cfg.listenFrames)
 	log.Printf("fps=%d", cfg.fps)
 
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.duration)
@@ -62,7 +67,8 @@ func parseFlags() config {
 	flag.StringVar(&cfg.room, "room", "pion-hevc-test-001", "signaling room id")
 	flag.StringVar(&cfg.signalingURL, "signaling-url", "wss://x5-webrtc-signaling.lord-sasapple.workers.dev", "signaling worker base URL")
 	flag.StringVar(&cfg.annexBFile, "annexb-file", "", "optional HEVC Annex B elementary stream file to loop")
-	flag.IntVar(&cfg.fps, "fps", 30, "sample send fps for annexb-file")
+	flag.StringVar(&cfg.listenFrames, "listen-frames", "", "optional TCP listen address for length-prefixed HEVC Annex B access units, e.g. 127.0.0.1:5005")
+	flag.IntVar(&cfg.fps, "fps", 30, "sample send fps")
 	durationSeconds := flag.Int("duration", 600, "run duration seconds")
 	flag.Parse()
 
@@ -89,8 +95,13 @@ func run(ctx context.Context, cfg config) error {
 	})
 	pc.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {
 		log.Printf("PeerConnection state: %s", state.String())
-		if state == webrtc.PeerConnectionStateConnected && cfg.annexBFile != "" && h265Track != nil {
-			go streamAnnexBFile(ctx, h265Track, cfg.annexBFile, cfg.fps)
+		if state == webrtc.PeerConnectionStateConnected && h265Track != nil {
+			if cfg.annexBFile != "" {
+				go streamAnnexBFile(ctx, h265Track, cfg.annexBFile, cfg.fps)
+			}
+			if cfg.listenFrames != "" {
+				go listenFrameStream(ctx, h265Track, cfg.listenFrames, cfg.fps)
+			}
 		}
 	})
 	pc.OnICEGatheringStateChange(func(state webrtc.ICEGatheringState) {
@@ -233,6 +244,96 @@ func addH265Track(pc *webrtc.PeerConnection) (*webrtc.TrackLocalStaticSample, er
 
 	log.Printf("added H265 track: id=x5-hevc-video stream=teleportation-hevc")
 	return track, nil
+}
+
+func listenFrameStream(ctx context.Context, track *webrtc.TrackLocalStaticSample, address string, fps int) {
+	listener, err := net.Listen("tcp", address)
+	if err != nil {
+		log.Printf("frame listener failed: %v", err)
+		return
+	}
+	defer listener.Close()
+
+	log.Printf("frame listener started: %s", address)
+
+	go func() {
+		<-ctx.Done()
+		_ = listener.Close()
+	}()
+
+	frameDuration := time.Second / time.Duration(fps)
+
+	for {
+		conn, err := listener.Accept()
+		if err != nil {
+			select {
+			case <-ctx.Done():
+				log.Printf("frame listener stopped")
+				return
+			default:
+				log.Printf("frame listener accept failed: %v", err)
+				continue
+			}
+		}
+
+		log.Printf("frame source connected: %s", conn.RemoteAddr())
+		handleFrameConn(ctx, track, conn, frameDuration)
+		log.Printf("frame source disconnected")
+	}
+}
+
+func handleFrameConn(ctx context.Context, track *webrtc.TrackLocalStaticSample, conn net.Conn, frameDuration time.Duration) {
+	defer conn.Close()
+
+	var sent uint64
+	header := make([]byte, 4)
+
+	for {
+		select {
+		case <-ctx.Done():
+			log.Printf("frame stream stopped: sent=%d", sent)
+			return
+		default:
+		}
+
+		if _, err := io.ReadFull(conn, header); err != nil {
+			if err != io.EOF {
+				log.Printf("frame length read failed: %v", err)
+			}
+			return
+		}
+
+		length := binary.BigEndian.Uint32(header)
+		if length == 0 {
+			continue
+		}
+		if length > 16*1024*1024 {
+			log.Printf("frame too large: %d bytes", length)
+			return
+		}
+
+		frame := make([]byte, length)
+		if _, err := io.ReadFull(conn, frame); err != nil {
+			log.Printf("frame payload read failed: %v", err)
+			return
+		}
+
+		if err := track.WriteSample(media.Sample{
+			Data:     frame,
+			Duration: frameDuration,
+		}); err != nil {
+			log.Printf("frame write sample failed: %v", err)
+			continue
+		}
+
+		sent++
+		if sent%uint64(max(1, int(frameDuration/time.Millisecond))) == 0 {
+			log.Printf("frame samples sent=%d lastBytes=%d", sent, len(frame))
+		}
+		if sent%30 == 0 {
+			log.Printf("frame samples sent=%d lastBytes=%d", sent, len(frame))
+		}
+	}
 }
 
 func streamAnnexBFile(ctx context.Context, track *webrtc.TrackLocalStaticSample, path string, fps int) {
