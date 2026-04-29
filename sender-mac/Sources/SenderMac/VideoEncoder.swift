@@ -107,6 +107,11 @@ final class VideoEncoder: @unchecked Sendable {
         setProperty(kVTCompressionPropertyKey_RealTime, value: kCFBooleanTrue, session: session)
         setProperty(kVTCompressionPropertyKey_AllowFrameReordering, value: kCFBooleanFalse, session: session)
         setProperty(kVTCompressionPropertyKey_AverageBitRate, value: config.bitrate as CFTypeRef, session: session)
+        let dataRateLimits = [
+            NSNumber(value: max(config.bitrate / 8, 1)),
+            NSNumber(value: 1)
+        ] as CFArray
+        setProperty(kVTCompressionPropertyKey_DataRateLimits, value: dataRateLimits, session: session)
         setProperty(kVTCompressionPropertyKey_ExpectedFrameRate, value: config.fps as CFTypeRef, session: session)
         setProperty(kVTCompressionPropertyKey_MaxKeyFrameInterval, value: config.fps * Int32(config.keyframeIntervalSeconds) as CFTypeRef, session: session)
         setProperty(kVTCompressionPropertyKey_MaxKeyFrameIntervalDuration, value: config.keyframeIntervalSeconds as CFTypeRef, session: session)

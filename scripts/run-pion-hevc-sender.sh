@@ -27,6 +27,10 @@ if [[ -z "$ROOM" ]]; then
   exit 64
 fi
 
+if [[ "$SEND_FPS" != "$FPS" ]]; then
+  echo "warning: SEND_FPS=$SEND_FPS differs from FPS=$FPS. Post-encode HEVC frame drops can break decoder reference chains."
+fi
+
 cleanup() {
   if [[ -n "${PION_PID:-}" ]] && kill -0 "$PION_PID" >/dev/null 2>&1; then
     kill "$PION_PID" >/dev/null 2>&1 || true
