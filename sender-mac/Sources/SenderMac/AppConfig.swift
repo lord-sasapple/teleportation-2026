@@ -28,6 +28,8 @@ struct AppConfig {
     var maxFrames: Int?
     var durationSeconds: Double?
     var listDevices: Bool = false
+    var requestCameraPermission: Bool = false
+    var cameraPermissionStatus: Bool = false
     var signalingOnly: Bool = false
     var glassToGlassTest: Bool = false
     var signalingBaseURL: URL?
@@ -77,6 +79,10 @@ struct AppConfig {
                 config.durationSeconds = try Self.parseDouble(try value(after: arg), option: arg)
             case "--list-devices":
                 config.listDevices = true
+            case "--request-camera-permission":
+                config.requestCameraPermission = true
+            case "--camera-permission-status":
+                config.cameraPermissionStatus = true
             case "--signaling-only":
                 config.signalingOnly = true
             case "--latency-report-test", "--glass-to-glass-test":
@@ -118,6 +124,8 @@ struct AppConfig {
 
         Options:
           --list-devices                 利用可能なカメラと format を表示して終了
+          --request-camera-permission    SenderMac.app としてカメラ許可ダイアログを出す
+          --camera-permission-status     現在のカメラ権限状態を表示して終了
           --device-name <name>           device localizedName の部分一致。既定: Insta360 X5
           --device-id <uniqueID>         device uniqueID を直接指定
           --builtin-camera               内蔵カメラを優先的に使用 (X5 なし時のテスト用)
@@ -139,6 +147,7 @@ struct AppConfig {
 
         Examples:
           swift run sender-mac --list-devices
+          swift run sender-mac --request-camera-permission
           swift run sender-mac --builtin-camera --codec hevc --duration 10
           swift run sender-mac --builtin-camera --codec h264 --duration 10
           swift run sender-mac --codec hevc --duration 10

@@ -1,5 +1,6 @@
 #!/bin/bash
 set -euo pipefail
+export PATH="/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:${PATH:-}"
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 APP_NAME="${APP_NAME:-SenderMac}"
@@ -12,7 +13,7 @@ FRAMEWORKS_DIR="$CONTENTS_DIR/Frameworks"
 
 cd "$ROOT_DIR"
 
-WEBRTC_PROVIDER="$WEBRTC_PROVIDER" /usr/bin/xcrun swift build -c "$CONFIGURATION"
+WEBRTC_PROVIDER="$WEBRTC_PROVIDER" /usr/bin/xcrun swift build -c "$CONFIGURATION" >&2
 
 mkdir -p "$MACOS_DIR" "$FRAMEWORKS_DIR"
 /bin/cp "$ROOT_DIR/Info.plist" "$CONTENTS_DIR/Info.plist"

@@ -1,5 +1,6 @@
 #!/bin/bash
 set -euo pipefail
+export PATH="/usr/bin:/bin:/usr/sbin:/sbin:/opt/homebrew/bin:${PATH:-}"
 
 ROOT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 APP_PATH="$(WEBRTC_PROVIDER="${WEBRTC_PROVIDER:-livekit}" "$ROOT_DIR/Scripts/build-app.sh")"

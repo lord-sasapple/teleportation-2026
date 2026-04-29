@@ -2,6 +2,21 @@ import AVFoundation
 import Foundation
 
 enum CameraAuthorization {
+    static func statusDescription() -> String {
+        switch AVCaptureDevice.authorizationStatus(for: .video) {
+        case .authorized:
+            return "authorized"
+        case .notDetermined:
+            return "notDetermined"
+        case .denied:
+            return "denied"
+        case .restricted:
+            return "restricted"
+        @unknown default:
+            return "unknown"
+        }
+    }
+
     static func request() -> Bool {
         switch AVCaptureDevice.authorizationStatus(for: .video) {
         case .authorized:

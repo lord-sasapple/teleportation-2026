@@ -1,4 +1,5 @@
 import AVFoundation
+import AppKit
 import Darwin
 import Foundation
 
@@ -24,6 +25,16 @@ struct SenderMacCommand {
 
     private static func run(config: AppConfig) throws {
         Logger.info("sender-mac を起動します: codec=\(config.codec.displayName) target=\(config.width)x\(config.height)@\(config.fps)fps bitrate=\(config.bitrate)bps")
+
+        if config.cameraPermissionStatus {
+            Logger.info("camera permission status: \(CameraAuthorization.statusDescription())")
+            return
+        }
+
+        if config.requestCameraPermission {
+            requestCameraPermissionWithRunLoop()
+            return
+        }
 
         if config.signalingOnly {
             try runSignalingOnly(config: config)
@@ -118,5 +129,21 @@ struct SenderMacCommand {
         }
         source.resume()
         return source
+    }
+
+    private static func requestCameraPermissionWithRunLoop() {
+        Logger.info("camera permission status(before): \(CameraAuthorization.statusDescription())")
+        let app = NSApplication.shared
+        app.setActivationPolicy(.regular)
+
+        AVCaptureDevice.requestAccess(for: .video) { allowed in
+            Logger.info("camera permission request result: \(allowed ? "allowed" : "denied")")
+            Logger.info("camera permission status(after): \(CameraAuthorization.statusDescription())")
+            DispatchQueue.main.async {
+                app.terminate(nil)
+            }
+        }
+
+        app.run()
     }
 }
