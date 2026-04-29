@@ -6,11 +6,13 @@ import (
 	"flag"
 	"fmt"
 	"log"
+	"os"
 	"strings"
 	"sync/atomic"
 	"time"
 
 	"github.com/pion/webrtc/v4"
+	"github.com/pion/webrtc/v4/pkg/media"
 	"nhooyr.io/websocket"
 )
 
@@ -33,6 +35,8 @@ type config struct {
 	room         string
 	signalingURL string
 	duration     time.Duration
+	annexBFile   string
+	fps          int
 }
 
 func main() {
@@ -42,6 +46,8 @@ func main() {
 	log.Printf("room=%s", cfg.room)
 	log.Printf("signaling=%s", cfg.signalingURL)
 	log.Printf("duration=%s", cfg.duration)
+	log.Printf("annexb-file=%s", cfg.annexBFile)
+	log.Printf("fps=%d", cfg.fps)
 
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.duration)
 	defer cancel()
@@ -55,10 +61,15 @@ func parseFlags() config {
 	var cfg config
 	flag.StringVar(&cfg.room, "room", "pion-hevc-test-001", "signaling room id")
 	flag.StringVar(&cfg.signalingURL, "signaling-url", "wss://x5-webrtc-signaling.lord-sasapple.workers.dev", "signaling worker base URL")
+	flag.StringVar(&cfg.annexBFile, "annexb-file", "", "optional HEVC Annex B elementary stream file to loop")
+	flag.IntVar(&cfg.fps, "fps", 30, "sample send fps for annexb-file")
 	durationSeconds := flag.Int("duration", 600, "run duration seconds")
 	flag.Parse()
 
 	cfg.duration = time.Duration(*durationSeconds) * time.Second
+	if cfg.fps <= 0 {
+		cfg.fps = 30
+	}
 	return cfg
 }
 
@@ -71,12 +82,16 @@ func run(ctx context.Context, cfg config) error {
 
 	var wsReady atomic.Bool
 	var wsConn *websocket.Conn
+	var h265Track *webrtc.TrackLocalStaticSample
 
 	pc.OnICEConnectionStateChange(func(state webrtc.ICEConnectionState) {
 		log.Printf("ICE connection state: %s", state.String())
 	})
 	pc.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {
 		log.Printf("PeerConnection state: %s", state.String())
+		if state == webrtc.PeerConnectionStateConnected && cfg.annexBFile != "" && h265Track != nil {
+			go streamAnnexBFile(ctx, h265Track, cfg.annexBFile, cfg.fps)
+		}
 	})
 	pc.OnICEGatheringStateChange(func(state webrtc.ICEGatheringState) {
 		log.Printf("ICE gathering state: %s", state.String())
@@ -106,7 +121,9 @@ func run(ctx context.Context, cfg config) error {
 		log.Printf("signaling send: ice-candidate mid=%s mline=%d", derefString(init.SDPMid), derefUint16(init.SDPMLineIndex))
 	})
 
-	if err := addH265Track(pc); err != nil {
+	var err error
+	h265Track, err = addH265Track(pc)
+	if err != nil {
 		return err
 	}
 
@@ -186,7 +203,7 @@ func newPeerConnection() (*webrtc.PeerConnection, error) {
 	})
 }
 
-func addH265Track(pc *webrtc.PeerConnection) error {
+func addH265Track(pc *webrtc.PeerConnection) (*webrtc.TrackLocalStaticSample, error) {
 	track, err := webrtc.NewTrackLocalStaticSample(
 		webrtc.RTPCodecCapability{
 			MimeType:     webrtc.MimeTypeH265,
@@ -198,12 +215,12 @@ func addH265Track(pc *webrtc.PeerConnection) error {
 		"teleportation-hevc",
 	)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	rtpSender, err := pc.AddTrack(track)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	go func() {
@@ -216,7 +233,145 @@ func addH265Track(pc *webrtc.PeerConnection) error {
 	}()
 
 	log.Printf("added H265 track: id=x5-hevc-video stream=teleportation-hevc")
-	return nil
+	return track, nil
+}
+
+func streamAnnexBFile(ctx context.Context, track *webrtc.TrackLocalStaticSample, path string, fps int) {
+	data, err := os.ReadFile(path)
+	if err != nil {
+		log.Printf("annexb read failed: %v", err)
+		return
+	}
+	if len(data) == 0 {
+		log.Printf("annexb file is empty: %s", path)
+		return
+	}
+
+	frames := splitAnnexBAccessUnits(data)
+	if len(frames) == 0 {
+		log.Printf("annexb split produced no frames; sending whole file as one repeated sample")
+		frames = [][]byte{data}
+	}
+
+	frameDuration := time.Second / time.Duration(fps)
+	ticker := time.NewTicker(frameDuration)
+	defer ticker.Stop()
+
+	log.Printf("annexb streaming started: file=%s bytes=%d frames=%d fps=%d", path, len(data), len(frames), fps)
+
+	index := 0
+	var sent uint64
+	for {
+		select {
+		case <-ctx.Done():
+			log.Printf("annexb streaming stopped: sent=%d", sent)
+			return
+		case <-ticker.C:
+			frame := frames[index]
+			index = (index + 1) % len(frames)
+
+			if err := track.WriteSample(media.Sample{
+				Data:     frame,
+				Duration: frameDuration,
+			}); err != nil {
+				log.Printf("annexb write sample failed: %v", err)
+				continue
+			}
+
+			sent++
+			if sent%uint64(fps) == 0 {
+				log.Printf("annexb samples sent=%d lastBytes=%d", sent, len(frame))
+			}
+		}
+	}
+}
+
+func splitAnnexBAccessUnits(data []byte) [][]byte {
+	nals := splitAnnexBNALUnits(data)
+	if len(nals) == 0 {
+		return nil
+	}
+
+	var frames [][]byte
+	var current []byte
+
+	flush := func() {
+		if len(current) > 0 {
+			copied := make([]byte, len(current))
+			copy(copied, current)
+			frames = append(frames, copied)
+			current = nil
+		}
+	}
+
+	for _, nal := range nals {
+		nalType := h265NALType(nal)
+		// VPS/SPS/PPS/SEI は次のVCLに付けたいので保持する。
+		// VCL NALが来たら、新しいaccess unitとして扱う簡易split。
+		if isH265VCL(nalType) {
+			flush()
+		}
+		current = append(current, []byte{0x00, 0x00, 0x00, 0x01}...)
+		current = append(current, nal...)
+	}
+	flush()
+
+	return frames
+}
+
+func splitAnnexBNALUnits(data []byte) [][]byte {
+	var starts []int
+	for i := 0; i+3 < len(data); i++ {
+		if data[i] == 0 && data[i+1] == 0 && data[i+2] == 1 {
+			starts = append(starts, i)
+			i += 2
+			continue
+		}
+		if i+4 < len(data) && data[i] == 0 && data[i+1] == 0 && data[i+2] == 0 && data[i+3] == 1 {
+			starts = append(starts, i)
+			i += 3
+			continue
+		}
+	}
+	if len(starts) == 0 {
+		return nil
+	}
+
+	var nals [][]byte
+	for idx, start := range starts {
+		prefix := 3
+		if start+4 < len(data) && data[start] == 0 && data[start+1] == 0 && data[start+2] == 0 && data[start+3] == 1 {
+			prefix = 4
+		}
+
+		nalStart := start + prefix
+		nalEnd := len(data)
+		if idx+1 < len(starts) {
+			nalEnd = starts[idx+1]
+		}
+
+		for nalEnd > nalStart && data[nalEnd-1] == 0 {
+			nalEnd--
+		}
+		if nalEnd > nalStart {
+			nal := make([]byte, nalEnd-nalStart)
+			copy(nal, data[nalStart:nalEnd])
+			nals = append(nals, nal)
+		}
+	}
+
+	return nals
+}
+
+func h265NALType(nal []byte) byte {
+	if len(nal) < 2 {
+		return 64
+	}
+	return (nal[0] >> 1) & 0x3f
+}
+
+func isH265VCL(nalType byte) bool {
+	return nalType <= 31
 }
 
 func handleSignal(ctx context.Context, pc *webrtc.PeerConnection, data []byte) error {
@@ -233,10 +388,13 @@ func handleSignal(ctx context.Context, pc *webrtc.PeerConnection, data []byte) e
 	case "answer":
 		log.Printf("signaling recv: answer")
 		logCodecLines("remote answer", msg.SDP)
-		return pc.SetRemoteDescription(webrtc.SessionDescription{
+		if err := pc.SetRemoteDescription(webrtc.SessionDescription{
 			Type: webrtc.SDPTypeAnswer,
 			SDP:  msg.SDP,
-		})
+		}); err != nil {
+			return err
+		}
+		return nil
 	case "ice-candidate":
 		if msg.Candidate == nil || msg.Candidate.Candidate == "" {
 			return nil
