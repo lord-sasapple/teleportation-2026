@@ -77,16 +77,30 @@ final class SenderSession: @unchecked Sendable {
         switch message {
         case .joined(let roomId, let role):
             Logger.info("signaling joined: room=\(roomId) role=\(role.rawValue)")
-            if role == .sender && !didScheduleInitialOffer {
-                didScheduleInitialOffer = true
-                Logger.info("sender joined 後に offer 作成を一度だけ試みます")
+            if role == .sender {
+                Logger.info("sender joined 後に fallback offer 作成を予約します")
                 DispatchQueue.global().asyncAfter(deadline: .now() + 1.0) { [weak self] in
-                    self?.webRTC.handlePeerJoined(role: .receiver)
+                    guard let self else { return }
+                    if self.didScheduleInitialOffer {
+                        Logger.info("fallback offer は不要です: 既に offer 作成済み/予約済み")
+                        return
+                    }
+                    self.didScheduleInitialOffer = true
+                    self.webRTC.handlePeerJoined(role: .receiver)
                 }
             }
         case .peerJoined(let role):
             Logger.info("signaling peer-joined: role=\(role.rawValue)")
-            webRTC.handlePeerJoined(role: role)
+            if role == .receiver {
+                if didScheduleInitialOffer {
+                    Logger.info("receiver peer-joined を受信しましたが、offer 作成は既に予約/開始済みなので無視します")
+                } else {
+                    didScheduleInitialOffer = true
+                    webRTC.handlePeerJoined(role: role)
+                }
+            } else {
+                webRTC.handlePeerJoined(role: role)
+            }
         case .answer(let sdp):
             Logger.info("signaling answer を受信しました: sdpBytes=\(sdp.utf8.count)")
             webRTC.handleAnswer(sdp: sdp)
