@@ -41,6 +41,7 @@ type config struct {
 	annexBFile   string
 	listenFrames string
 	fps          int
+	queueSize    int
 }
 
 func main() {
@@ -53,6 +54,7 @@ func main() {
 	log.Printf("annexb-file=%s", cfg.annexBFile)
 	log.Printf("listen-frames=%s", cfg.listenFrames)
 	log.Printf("fps=%d", cfg.fps)
+	log.Printf("queue-size=%d", cfg.queueSize)
 
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.duration)
 	defer cancel()
@@ -69,12 +71,16 @@ func parseFlags() config {
 	flag.StringVar(&cfg.annexBFile, "annexb-file", "", "optional HEVC Annex B elementary stream file to loop")
 	flag.StringVar(&cfg.listenFrames, "listen-frames", "", "optional TCP listen address for length-prefixed HEVC Annex B access units, e.g. 127.0.0.1:5005")
 	flag.IntVar(&cfg.fps, "fps", 30, "sample send fps")
+	flag.IntVar(&cfg.queueSize, "queue-size", 3, "low-latency frame queue size for TCP HEVC access units")
 	durationSeconds := flag.Int("duration", 600, "run duration seconds")
 	flag.Parse()
 
 	cfg.duration = time.Duration(*durationSeconds) * time.Second
 	if cfg.fps <= 0 {
 		cfg.fps = 30
+	}
+	if cfg.queueSize <= 0 {
+		cfg.queueSize = 1
 	}
 	return cfg
 }
@@ -141,7 +147,7 @@ func run(ctx context.Context, cfg config) error {
 		return err
 	}
 	if cfg.listenFrames != "" {
-		go listenFrameStream(ctx, h265Track, cfg.listenFrames, cfg.fps, &mediaReady)
+		go listenFrameStream(ctx, h265Track, cfg.listenFrames, cfg.fps, cfg.queueSize, &mediaReady)
 	}
 
 	wsURL := strings.TrimRight(cfg.signalingURL, "/") + "/room/" + cfg.room + "?role=sender"
@@ -253,7 +259,7 @@ func addH265Track(pc *webrtc.PeerConnection) (*webrtc.TrackLocalStaticSample, er
 	return track, nil
 }
 
-func listenFrameStream(ctx context.Context, track *webrtc.TrackLocalStaticSample, address string, fps int, mediaReady *atomic.Bool) {
+func listenFrameStream(ctx context.Context, track *webrtc.TrackLocalStaticSample, address string, fps int, queueSize int, mediaReady *atomic.Bool) {
 	listener, err := net.Listen("tcp", address)
 	if err != nil {
 		log.Printf("frame listener failed: %v", err)
@@ -284,65 +290,144 @@ func listenFrameStream(ctx context.Context, track *webrtc.TrackLocalStaticSample
 		}
 
 		log.Printf("frame source connected: %s", conn.RemoteAddr())
-		handleFrameConn(ctx, track, conn, frameDuration, mediaReady)
+		handleFrameConn(ctx, track, conn, frameDuration, queueSize, mediaReady)
 		log.Printf("frame source disconnected")
 	}
 }
 
-func handleFrameConn(ctx context.Context, track *webrtc.TrackLocalStaticSample, conn net.Conn, frameDuration time.Duration, mediaReady *atomic.Bool) {
+func handleFrameConn(ctx context.Context, track *webrtc.TrackLocalStaticSample, conn net.Conn, frameDuration time.Duration, queueSize int, mediaReady *atomic.Bool) {
 	defer conn.Close()
 
+	if queueSize <= 0 {
+		queueSize = 1
+	}
+
+	frameQueue := make(chan []byte, queueSize)
+	readerDone := make(chan struct{})
+
+	go func() {
+		defer close(readerDone)
+		defer close(frameQueue)
+
+		var received uint64
+		var dropped uint64
+		header := make([]byte, 4)
+
+		for {
+			select {
+			case <-ctx.Done():
+				log.Printf("frame input stopped: received=%d dropped=%d queue=%d", received, dropped, len(frameQueue))
+				return
+			default:
+			}
+
+			if _, err := io.ReadFull(conn, header); err != nil {
+				if err != io.EOF {
+					log.Printf("frame length read failed: %v", err)
+				}
+				log.Printf("frame input closed: received=%d dropped=%d queue=%d", received, dropped, len(frameQueue))
+				return
+			}
+
+			length := binary.BigEndian.Uint32(header)
+			if length == 0 {
+				continue
+			}
+			if length > 16*1024*1024 {
+				log.Printf("frame too large: %d bytes", length)
+				return
+			}
+
+			frame := make([]byte, length)
+			if _, err := io.ReadFull(conn, frame); err != nil {
+				log.Printf("frame payload read failed: %v", err)
+				return
+			}
+
+			received++
+			select {
+			case frameQueue <- frame:
+			default:
+				select {
+				case <-frameQueue:
+					dropped++
+				default:
+				}
+
+				select {
+				case frameQueue <- frame:
+				case <-ctx.Done():
+					log.Printf("frame input stopped: received=%d dropped=%d queue=%d", received, dropped, len(frameQueue))
+					return
+				}
+			}
+
+			if received%30 == 0 {
+				log.Printf("frame input received=%d dropped=%d queue=%d", received, dropped, len(frameQueue))
+			}
+		}
+	}()
+
+	go func() {
+		<-ctx.Done()
+		_ = conn.Close()
+	}()
+
+	ticker := time.NewTicker(frameDuration)
+	defer ticker.Stop()
+
 	var sent uint64
-	header := make([]byte, 4)
+	var skipped uint64
+	var lastBytes int
 
 	for {
 		select {
 		case <-ctx.Done():
-			log.Printf("frame stream stopped: sent=%d", sent)
+			log.Printf("frame stream stopped: sent=%d skipped=%d queue=%d", sent, skipped, len(frameQueue))
 			return
-		default:
-		}
-
-		if _, err := io.ReadFull(conn, header); err != nil {
-			if err != io.EOF {
-				log.Printf("frame length read failed: %v", err)
+		case <-readerDone:
+			log.Printf("frame stream stopped: sent=%d skipped=%d queue=%d", sent, skipped, len(frameQueue))
+			return
+		case <-ticker.C:
+			var frame []byte
+			for {
+				select {
+				case queuedFrame, ok := <-frameQueue:
+					if !ok {
+						log.Printf("frame stream stopped: sent=%d skipped=%d queue=%d", sent, skipped, len(frameQueue))
+						return
+					}
+					frame = queuedFrame
+				default:
+					goto drained
+				}
 			}
-			return
-		}
+		drained:
+			if frame == nil {
+				continue
+			}
 
-		length := binary.BigEndian.Uint32(header)
-		if length == 0 {
-			continue
-		}
-		if length > 16*1024*1024 {
-			log.Printf("frame too large: %d bytes", length)
-			return
-		}
+			lastBytes = len(frame)
+			if mediaReady != nil && !mediaReady.Load() {
+				skipped++
+				if skipped%30 == 0 {
+					log.Printf("frame samples skipped: media not ready count=%d lastBytes=%d queue=%d", skipped, lastBytes, len(frameQueue))
+				}
+				continue
+			}
 
-		frame := make([]byte, length)
-		if _, err := io.ReadFull(conn, frame); err != nil {
-			log.Printf("frame payload read failed: %v", err)
-			return
-		}
+			if err := track.WriteSample(media.Sample{
+				Data:     frame,
+				Duration: frameDuration,
+			}); err != nil {
+				log.Printf("frame write sample failed: %v", err)
+				continue
+			}
 
-		if mediaReady != nil && !mediaReady.Load() {
-			continue
-		}
-
-		if err := track.WriteSample(media.Sample{
-			Data:     frame,
-			Duration: frameDuration,
-		}); err != nil {
-			log.Printf("frame write sample failed: %v", err)
-			continue
-		}
-
-		sent++
-		if sent%uint64(max(1, int(frameDuration/time.Millisecond))) == 0 {
-			log.Printf("frame samples sent=%d lastBytes=%d", sent, len(frame))
-		}
-		if sent%30 == 0 {
-			log.Printf("frame samples sent=%d lastBytes=%d", sent, len(frame))
+			sent++
+			if sent%30 == 0 {
+				log.Printf("frame samples sent=%d lastBytes=%d queue=%d skipped=%d", sent, lastBytes, len(frameQueue), skipped)
+			}
 		}
 	}
 }
@@ -497,6 +582,10 @@ func handleSignal(ctx context.Context, c *websocket.Conn, pc *webrtc.PeerConnect
 	case "peer-joined":
 		log.Printf("signaling recv: peer-joined role=%s", msg.Role)
 		if msg.Role == "receiver" && localOfferSDP != "" {
+			if pc.SignalingState() != webrtc.SignalingStateHaveLocalOffer {
+				log.Printf("skip offer resend: signalingState=%s; restart pion-hevc-sender for clean receiver reconnect", pc.SignalingState())
+				return nil
+			}
 			if err := writeJSON(ctx, c, signalMessage{Type: "offer", SDP: localOfferSDP}); err != nil {
 				return fmt.Errorf("resend offer after receiver joined: %w", err)
 			}

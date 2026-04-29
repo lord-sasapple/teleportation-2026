@@ -57,6 +57,27 @@ WEBRTC_PROVIDER=livekit ./Scripts/run-sender-smoke.sh
 WEBRTC_PROVIDER=livekit DURATION=60 ./Scripts/run-codec-comparison.sh
 ```
 
+## Pion HEVC P2P bridge
+
+LiveKitWebRTC で HEVC/H.265 送信 codec が見えない場合の検証経路として、sender-mac の VideoToolbox HEVC hardware encode 出力を localhost TCP で Go/Pion へ渡し、Pion から WebRTC H.265 P2P 送信します。`--pion-frame-socket` 指定時の sender-mac は Pion 専用モードになり、LiveKitWebRTC / signaling は起動しません。
+
+```bash
+cd tools/pion-hevc-sender
+go run . --room pion-routeb-wan-001 --duration 600 --listen-frames 127.0.0.1:5005 --fps 30 --queue-size 3
+```
+
+```bash
+cd sender-mac
+WEBRTC_PROVIDER=livekit swift run sender-mac \
+  --codec hevc \
+  --width 1920 \
+  --height 1080 \
+  --fps 30 \
+  --bitrate 6000000 \
+  --duration 600 \
+  --pion-frame-socket 127.0.0.1:5005
+```
+
 ## receiver-quest
 
 Unity 2022.3 LTS 以降で `receiver-quest` を開きます。現時点では Android native libwebrtc / MediaCodec 実装前の skeleton で、signaling、DataChannel timestamp 処理、stats overlay、inside-out sphere renderer まで入っています。

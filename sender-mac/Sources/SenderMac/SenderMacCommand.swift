@@ -54,7 +54,6 @@ struct SenderMacCommand {
         Logger.info("capture device を選択しました: name=\(device.localizedName) uniqueID=\(device.uniqueID)")
         try CaptureDeviceDiscovery.configureFormat(device: device, config: config)
 
-        let senderSession = SenderSession(config: config)
         let pionFrameSocketClient: PionFrameSocketClient?
         if let address = config.pionFrameSocket {
             pionFrameSocketClient = try PionFrameSocketClient(address: address)
@@ -65,7 +64,16 @@ struct SenderMacCommand {
         }
         defer { pionFrameSocketClient?.stop() }
 
-        senderSession.start()
+        let pionOnlyMode = pionFrameSocketClient != nil
+        let senderSession: SenderSession?
+        if pionOnlyMode {
+            senderSession = nil
+            Logger.info("--pion-frame-socket 指定のため Pion 専用モードで起動します。LiveKitWebRTC / signaling は起動しません")
+        } else {
+            let session = SenderSession(config: config)
+            session.start()
+            senderSession = session
+        }
 
         let stopController = StopController()
         stopController.senderSession = senderSession
@@ -75,10 +83,10 @@ struct SenderMacCommand {
             config: config,
             device: device,
             rawFrameHandler: { frame in
-                senderSession.handleRawFrame(frame)
+                senderSession?.handleRawFrame(frame)
             },
             encodedFrameHandler: { frame in
-                senderSession.handleEncodedFrame(frame)
+                senderSession?.handleEncodedFrame(frame)
                 pionFrameSocketClient?.send(frame: frame)
             },
             stopHandler: {
@@ -88,7 +96,7 @@ struct SenderMacCommand {
         stopController.pipeline = pipeline
 
         // CapturePipeline 側の encode 統計と sender 側の送信カウントを同じ monitor に寄せます。
-        senderSession.setStatsMonitor(pipeline.getStatsMonitor())
+        senderSession?.setStatsMonitor(pipeline.getStatsMonitor())
 
         if let durationSeconds = config.durationSeconds {
             DispatchQueue.global(qos: .userInitiated).asyncAfter(deadline: .now() + durationSeconds) {
@@ -102,7 +110,7 @@ struct SenderMacCommand {
         stopController.waitUntilStopped()
 
         interruptSource.cancel()
-        senderSession.getGlassToGlassTestMode().printFinalStats()
+        senderSession?.getGlassToGlassTestMode().printFinalStats()
         Logger.info("sender-mac を終了しました")
     }
 
