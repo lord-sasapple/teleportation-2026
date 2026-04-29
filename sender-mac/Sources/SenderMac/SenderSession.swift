@@ -5,6 +5,7 @@ final class SenderSession: @unchecked Sendable {
     private let webRTC: WebRTCSenderAdapter
     private let signalingClient: SignalingClient?
     private var statsMonitor: SenderStatsMonitor?
+    private var didScheduleInitialOffer = false
     private let glassToGlassTestMode: GlassToGlassTestMode
 
     init(config: AppConfig) {
@@ -76,9 +77,10 @@ final class SenderSession: @unchecked Sendable {
         switch message {
         case .joined(let roomId, let role):
             Logger.info("signaling joined: room=\(roomId) role=\(role.rawValue)")
-            if role == .sender {
-                Logger.info("sender joined 後に offer 作成を試みます")
-                DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) { [weak self] in
+            if role == .sender && !didScheduleInitialOffer {
+                didScheduleInitialOffer = true
+                Logger.info("sender joined 後に offer 作成を一度だけ試みます")
+                DispatchQueue.global().asyncAfter(deadline: .now() + 1.0) { [weak self] in
                     self?.webRTC.handlePeerJoined(role: .receiver)
                 }
             }
