@@ -147,7 +147,11 @@ func run(ctx context.Context, cfg config) error {
 		return err
 	}
 	if cfg.listenFrames != "" {
-		go listenFrameStream(ctx, h265Track, cfg.listenFrames, cfg.fps, cfg.queueSize, &mediaReady)
+		frameListener, err := net.Listen("tcp", cfg.listenFrames)
+		if err != nil {
+			return fmt.Errorf("start frame listener %s: %w", cfg.listenFrames, err)
+		}
+		go serveFrameStream(ctx, h265Track, frameListener, cfg.fps, cfg.queueSize, &mediaReady)
 	}
 
 	wsURL := strings.TrimRight(cfg.signalingURL, "/") + "/room/" + cfg.room + "?role=sender"
@@ -259,15 +263,10 @@ func addH265Track(pc *webrtc.PeerConnection) (*webrtc.TrackLocalStaticSample, er
 	return track, nil
 }
 
-func listenFrameStream(ctx context.Context, track *webrtc.TrackLocalStaticSample, address string, fps int, queueSize int, mediaReady *atomic.Bool) {
-	listener, err := net.Listen("tcp", address)
-	if err != nil {
-		log.Printf("frame listener failed: %v", err)
-		return
-	}
+func serveFrameStream(ctx context.Context, track *webrtc.TrackLocalStaticSample, listener net.Listener, fps int, queueSize int, mediaReady *atomic.Bool) {
 	defer listener.Close()
 
-	log.Printf("frame listener started: %s", address)
+	log.Printf("frame listener started: %s", listener.Addr())
 
 	go func() {
 		<-ctx.Done()
