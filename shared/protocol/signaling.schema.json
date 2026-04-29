@@ -1,0 +1,157 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.local/x5-quest-webrtc-telepresence/signaling.schema.json",
+  "title": "X5 Quest WebRTC Signaling Messages",
+  "type": "object",
+  "oneOf": [
+    { "$ref": "#/$defs/join" },
+    { "$ref": "#/$defs/offer" },
+    { "$ref": "#/$defs/answer" },
+    { "$ref": "#/$defs/iceCandidate" },
+    { "$ref": "#/$defs/leave" },
+    { "$ref": "#/$defs/ping" },
+    { "$ref": "#/$defs/joined" },
+    { "$ref": "#/$defs/peerJoined" },
+    { "$ref": "#/$defs/peerLeft" },
+    { "$ref": "#/$defs/pong" },
+    { "$ref": "#/$defs/error" },
+    { "$ref": "#/$defs/latencySync" },
+    { "$ref": "#/$defs/latencyEcho" }
+  ],
+  "$defs": {
+    "role": {
+      "type": "string",
+      "enum": ["sender", "receiver"]
+    },
+    "candidate": {
+      "type": "object",
+      "required": ["candidate"],
+      "additionalProperties": true,
+      "properties": {
+        "candidate": { "type": "string" },
+        "sdpMid": { "type": ["string", "null"] },
+        "sdpMLineIndex": { "type": ["integer", "null"], "minimum": 0 }
+      }
+    },
+    "join": {
+      "type": "object",
+      "required": ["type", "roomId", "role"],
+      "additionalProperties": true,
+      "properties": {
+        "type": { "const": "join" },
+        "roomId": { "type": "string", "minLength": 1 },
+        "role": { "$ref": "#/$defs/role" }
+      }
+    },
+    "offer": {
+      "type": "object",
+      "required": ["type", "sdp"],
+      "additionalProperties": true,
+      "properties": {
+        "type": { "const": "offer" },
+        "sdp": { "type": "string" }
+      }
+    },
+    "answer": {
+      "type": "object",
+      "required": ["type", "sdp"],
+      "additionalProperties": true,
+      "properties": {
+        "type": { "const": "answer" },
+        "sdp": { "type": "string" }
+      }
+    },
+    "iceCandidate": {
+      "type": "object",
+      "required": ["type", "candidate"],
+      "additionalProperties": true,
+      "properties": {
+        "type": { "const": "ice-candidate" },
+        "candidate": { "$ref": "#/$defs/candidate" }
+      }
+    },
+    "leave": {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": true,
+      "properties": {
+        "type": { "const": "leave" }
+      }
+    },
+    "ping": {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": true,
+      "properties": {
+        "type": { "const": "ping" }
+      }
+    },
+    "joined": {
+      "type": "object",
+      "required": ["type", "roomId", "role"],
+      "additionalProperties": true,
+      "properties": {
+        "type": { "const": "joined" },
+        "roomId": { "type": "string" },
+        "role": { "$ref": "#/$defs/role" }
+      }
+    },
+    "peerJoined": {
+      "type": "object",
+      "required": ["type", "role"],
+      "additionalProperties": true,
+      "properties": {
+        "type": { "const": "peer-joined" },
+        "role": { "$ref": "#/$defs/role" }
+      }
+    },
+    "peerLeft": {
+      "type": "object",
+      "required": ["type", "role"],
+      "additionalProperties": true,
+      "properties": {
+        "type": { "const": "peer-left" },
+        "role": { "$ref": "#/$defs/role" }
+      }
+    },
+    "pong": {
+      "type": "object",
+      "required": ["type"],
+      "additionalProperties": true,
+      "properties": {
+        "type": { "const": "pong" }
+      }
+    },
+    "error": {
+      "type": "object",
+      "required": ["type", "message"],
+      "additionalProperties": true,
+      "properties": {
+        "type": { "const": "error" },
+        "message": { "type": "string" }
+      }
+    },
+    "latencySync": {
+      "type": "object",
+      "required": ["type", "sequence", "senderTimeMs"],
+      "additionalProperties": true,
+      "properties": {
+        "type": { "const": "latency-sync" },
+        "sequence": { "type": "integer" },
+        "senderTimeMs": { "type": "number" }
+      }
+    },
+    "latencyEcho": {
+      "type": "object",
+      "required": ["type", "sequence", "senderTimeMs", "receiverTimeMs"],
+      "additionalProperties": true,
+      "properties": {
+        "type": { "const": "latency-echo" },
+        "sequence": { "type": "integer" },
+        "senderTimeMs": { "type": "number" },
+        "receiverTimeMs": { "type": "number" }
+      }
+    }
+  }
+}
+

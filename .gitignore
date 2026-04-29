@@ -1,0 +1,77 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+._*
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+.dev.vars
+.dev.vars.*
+
+# Node / Cloudflare Workers
+node_modules/
+.wrangler/
+.mf/
+dist/
+coverage/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# TypeScript
+*.tsbuildinfo
+
+# Xcode / Swift
+DerivedData/
+.build/
+build/
+*.xcuserdata/
+*.xcuserstate
+*.xcworkspace/xcuserdata/
+*.xcodeproj/xcuserdata/
+*.moved-aside
+*.hmap
+*.ipa
+*.dSYM.zip
+*.dSYM/
+
+# Swift Package Manager
+Package.resolved
+
+# Unity
+receiver-quest/Library/
+receiver-quest/Temp/
+receiver-quest/Obj/
+receiver-quest/Build/
+receiver-quest/Builds/
+receiver-quest/Logs/
+receiver-quest/UserSettings/
+receiver-quest/MemoryCaptures/
+receiver-quest/*.csproj
+receiver-quest/*.sln
+receiver-quest/*.user
+receiver-quest/*.pidb
+receiver-quest/*.booproj
+receiver-quest/*.svd
+receiver-quest/*.pdb
+receiver-quest/*.mdb
+receiver-quest/*.opendb
+receiver-quest/*.VC.db
+
+# Android / Gradle
+.gradle/
+gradle-app.setting
+local.properties
+*.apk
+*.aab
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
