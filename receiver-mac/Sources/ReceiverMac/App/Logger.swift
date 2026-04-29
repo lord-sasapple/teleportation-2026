@@ -7,9 +7,11 @@ enum LogLevel: String {
 }
 
 enum Logger {
-    static var mirror: (@Sendable (LogLevel, String) -> Void)?
-    private static let mirrorLock = NSLock()
-    private static var isMirroring = false
+    private static let mirrorState = LoggerMirrorState()
+
+    static func setMirror(_ mirror: (@Sendable (LogLevel, String) -> Void)?) {
+        mirrorState.set(mirror)
+    }
 
     static func info(_ message: String) {
         write(.info, message)
@@ -27,19 +29,35 @@ enum Logger {
         let timestamp = ISO8601DateFormatter().string(from: Date())
         print("[\(timestamp)] [\(level.rawValue)] \(message)")
 
-        mirrorLock.lock()
-        if isMirroring {
-            mirrorLock.unlock()
+        mirrorState.emit(level: level, message: message)
+    }
+}
+
+private final class LoggerMirrorState: @unchecked Sendable {
+    private let lock = NSLock()
+    private var mirror: (@Sendable (LogLevel, String) -> Void)?
+    private var isEmitting = false
+
+    func set(_ mirror: (@Sendable (LogLevel, String) -> Void)?) {
+        lock.lock()
+        self.mirror = mirror
+        lock.unlock()
+    }
+
+    func emit(level: LogLevel, message: String) {
+        lock.lock()
+        if isEmitting {
+            lock.unlock()
             return
         }
-        isMirroring = true
+        isEmitting = true
         let mirror = mirror
-        mirrorLock.unlock()
+        lock.unlock()
 
         mirror?(level, message)
 
-        mirrorLock.lock()
-        isMirroring = false
-        mirrorLock.unlock()
+        lock.lock()
+        isEmitting = false
+        lock.unlock()
     }
 }

@@ -18,7 +18,7 @@ final class ReceiverApp: @unchecked Sendable {
     }
 
     func run() {
-        Logger.mirror = { [weak self] level, message in
+        Logger.setMirror { [weak self] level, message in
             self?.signalingClient.sendReceiverLog(level: level, message: message)
         }
 
@@ -165,7 +165,7 @@ final class ReceiverApp: @unchecked Sendable {
         running = false
         Logger.info("receiver-mac を停止します")
         signalingClient.disconnect()
-        Logger.mirror = nil
+        Logger.setMirror(nil)
         webRTC.stop()
         Task { @MainActor in
             self.viewer?.stop()

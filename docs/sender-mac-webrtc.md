@@ -77,6 +77,8 @@ LiveKitWebRTC / stasel WebRTC の macOS build で HEVC/H.265 送信 codec が公
 
 Go 側の `tools/pion-hevc-sender` は `--listen-frames` で TCP を受け、`--queue-size` の低遅延キューと `--fps` ticker で `WriteSample` をペーシングします。キューが詰まった場合は古い frame を捨て、最新 frame を優先します。ただし WAN 検証の既定では sender-mac の capture/encode fps と Go の send fps を同じ値にして、エンコード済み HEVC access unit の通常間引きを避けます。
 
+`receiver-mac` は `receiver-log` を signaling 経由で sender へ転送します。`scripts/run-pion-hevc-sender.sh` の Go/Pion ログに `receiver log [...]` として表示されるため、WAN 検証中に受信側 Mac の terminal を毎回覗かなくても inbound-rtp / candidate-pair / renderer の状態を確認できます。
+
 ## HEVC/H.265 注意
 
 WebRTC の HEVC/H.265 対応は distribution と build flags に左右されます。HEVC negotiation が詰まった場合も、設計上は HEVC first を維持し、H.264 fallback で MVP を成立させます。現在は SDP の video payload 順を `H265` / `HEVC` / `H264` の順へ寄せる helper を用意しています。

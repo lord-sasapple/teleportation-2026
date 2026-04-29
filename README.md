@@ -73,6 +73,8 @@ CODEC=hevc DURATION=600 bash scripts/run-remote-receiver.sh pion-routeb-wan-001
 DEVICE_ID="0x1000002e1a0005" ./scripts/run-pion-hevc-sender.sh pion-routeb-wan-001
 ```
 
+`receiver-mac` の主要ログは signaling 経由で sender 側にも `receiver log [...]` として表示されます。WAN 検証中は自分の terminal だけで受信側の inbound-rtp / candidate-pair / renderer 状態を追えます。
+
 Insta360 公式の X5 OBS 手順では、Webcam Mode で capture device の解像度を `2880x1440`、FPS を `30` にすると 360° 2:1 panoramic output になると案内されています。script の既定は WAN 検証向けに `2880x1440 / 2Mbps / 30fps / aspect 2:1 / keyframe interval 10s` です。HEVC はエンコード後に frame を間引くと参照フレーム列が壊れやすいため、通常は `SEND_FPS` を `FPS` と同じ値にしてください。
 
 手動で分けて起動する場合:

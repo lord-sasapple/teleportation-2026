@@ -11,6 +11,7 @@ Cloudflare Workers + Durable Objects による WebRTC 1:1 P2P 用のシグナリ
 - receiver から sender へ `answer` を転送する。
 - 双方向の `ice-candidate` を転送する。
 - 初期検証用に `latency-sync` / `latency-echo` を転送する。
+- receiver から sender へ `receiver-log` の軽量診断テキストを転送する。
 - WebSocket Hibernation API を使い、Durable Object の復帰後も role を復元する。
 
 ## ローカル起動
@@ -116,7 +117,7 @@ server -> client:
 { "type": "error", "message": "..." }
 ```
 
-`offer`、`answer`、`ice-candidate`、`latency-sync`、`latency-echo` は相手へそのまま転送されます。SDP と candidate の全文は通常ログに出しません。
+`offer`、`answer`、`ice-candidate`、`latency-sync`、`latency-echo`、`receiver-log` は相手へ転送されます。SDP と candidate の全文は通常ログに出しません。`receiver-log` は receiver の診断ログだけに使い、映像、音声、RTP、RTCP は扱いません。
 
 ## sender/receiver の接続手順
 
@@ -159,4 +160,3 @@ npm test
 ```
 
 このスクリプトは sender/receiver を接続し、`offer`、`answer`、双方向 `ice-candidate`、`latency-sync`、`latency-echo`、duplicate sender 拒否、`peer-left` を確認します。
-
