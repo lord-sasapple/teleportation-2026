@@ -17,6 +17,7 @@ WEBRTC_PROVIDER="${WEBRTC_PROVIDER:-livekit}"
 DEVICE_ID="${DEVICE_ID:-}"
 USE_BUILTIN_CAMERA="${USE_BUILTIN_CAMERA:-0}"
 REQUIRE_ASPECT_RATIO="${REQUIRE_ASPECT_RATIO:-2:1}"
+CLEAN_STALE_FRAME_LISTENER="${CLEAN_STALE_FRAME_LISTENER:-1}"
 
 if [[ -z "$ROOM" ]]; then
   echo "usage: ./scripts/run-pion-hevc-sender.sh <room-id>"
@@ -31,6 +32,16 @@ cleanup() {
   fi
 }
 trap cleanup EXIT INT TERM
+
+FRAME_PORT="${PION_FRAME_SOCKET##*:}"
+if [[ "$CLEAN_STALE_FRAME_LISTENER" == "1" ]] && command -v lsof >/dev/null 2>&1; then
+  STALE_PIDS="$(lsof -tiTCP:"$FRAME_PORT" -sTCP:LISTEN 2>/dev/null || true)"
+  if [[ -n "$STALE_PIDS" ]]; then
+    echo "stopping stale frame listener(s) on $PION_FRAME_SOCKET: $STALE_PIDS"
+    kill $STALE_PIDS >/dev/null 2>&1 || true
+    sleep 1
+  fi
+fi
 
 echo "== Teleportation Pion HEVC sender =="
 echo "room=$ROOM"
