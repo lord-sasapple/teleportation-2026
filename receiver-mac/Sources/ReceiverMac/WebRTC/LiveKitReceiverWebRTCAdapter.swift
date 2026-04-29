@@ -16,6 +16,7 @@ final class LiveKitReceiverWebRTCAdapter: NSObject, ReceiverWebRTCAdapter, @unch
     private var peerConnection: LKRTCPeerConnection?
     private var preferredCodec: String = "hevc"
     private let frameRenderer = PixelBufferFrameRenderer()
+    private var previewRendererView: LKRTCMTLNSVideoView?
     private weak var attachedVideoTrack: LKRTCVideoTrack?
 
     init(iceServers: [String]) {
@@ -44,7 +45,15 @@ final class LiveKitReceiverWebRTCAdapter: NSObject, ReceiverWebRTCAdapter, @unch
         queue.sync {
             if let track = attachedVideoTrack {
                 track.remove(frameRenderer)
+                if let previewRendererView {
+                    track.remove(previewRendererView)
+                }
                 attachedVideoTrack = nil
+            }
+            let viewToRemove = previewRendererView
+            previewRendererView = nil
+            DispatchQueue.main.async {
+                viewToRemove?.removeFromSuperview()
             }
             peerConnection?.close()
             peerConnection = nil
@@ -311,9 +320,29 @@ extension LiveKitReceiverWebRTCAdapter: LKRTCPeerConnectionDelegate {
         if let track = rtpReceiver.track as? LKRTCVideoTrack {
             track.isEnabled = true
             track.shouldReceive = true
-            attachedVideoTrack?.remove(frameRenderer)
+            if let previousTrack = attachedVideoTrack {
+                previousTrack.remove(frameRenderer)
+                if let previewRendererView {
+                    previousTrack.remove(previewRendererView)
+                }
+            }
             attachedVideoTrack = track
             track.add(frameRenderer)
+
+            DispatchQueue.main.async { [weak self, weak track] in
+                guard let self, let track else { return }
+                let previewView: LKRTCMTLNSVideoView
+                if let existing = self.previewRendererView {
+                    previewView = existing
+                } else {
+                    previewView = LKRTCMTLNSVideoView(frame: .zero)
+                    self.previewRendererView = previewView
+                }
+                track.add(previewView)
+                self.onPreviewRendererView?(previewView)
+                Logger.info("receiver 標準 Metal renderer view を接続しました")
+            }
+
             Logger.info("receiver video track renderer を接続しました: trackId=\(track.trackId) enabled=\(track.isEnabled) shouldReceive=\(track.shouldReceive) readyState=\(track.readyState.rawValue)")
             logTransceivers("renderer 接続時")
         }
@@ -352,9 +381,17 @@ extension LiveKitReceiverWebRTCAdapter: LKRTCPeerConnectionDelegate {
     func peerConnection(_ peerConnection: LKRTCPeerConnection, didRemove rtpReceiver: LKRTCRtpReceiver) {
         if let track = rtpReceiver.track as? LKRTCVideoTrack {
             track.remove(frameRenderer)
+            if let previewRendererView {
+                track.remove(previewRendererView)
+            }
             if attachedVideoTrack === track {
                 attachedVideoTrack = nil
             }
+        }
+        let viewToRemove = previewRendererView
+        previewRendererView = nil
+        DispatchQueue.main.async {
+            viewToRemove?.removeFromSuperview()
         }
         Logger.info("receiver video track renderer を切断しました")
     }

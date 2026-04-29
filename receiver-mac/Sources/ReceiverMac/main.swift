@@ -26,6 +26,12 @@ final class ReceiverApp: @unchecked Sendable {
         webRTC.onLocalIceCandidate = { [weak self] candidate in
             self?.signalingClient.sendIceCandidate(candidate)
         }
+        webRTC.onPreviewRendererView = { [weak self] previewView in
+            Task { @MainActor [weak self] in
+                self?.viewer?.showPreviewRendererView(previewView)
+            }
+        }
+
         webRTC.onFrame = { [weak self] pixelBuffer in
             guard let self else { return }
             self.receivedFrames += 1

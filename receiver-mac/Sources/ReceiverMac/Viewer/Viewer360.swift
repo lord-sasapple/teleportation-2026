@@ -33,6 +33,33 @@ final class Viewer360 {
         (yaw, pitch)
     }
 
+    func showPreviewRendererView(_ rendererView: NSView) {
+        setupWindowIfNeeded()
+
+        guard let sceneView else {
+            Logger.warn("preview renderer view を表示できません: sceneView がありません")
+            return
+        }
+
+        if rendererView.superview !== sceneView {
+            rendererView.removeFromSuperview()
+            rendererView.translatesAutoresizingMaskIntoConstraints = false
+            rendererView.wantsLayer = true
+            rendererView.layer?.zPosition = 100
+            sceneView.addSubview(rendererView)
+
+            NSLayoutConstraint.activate([
+                rendererView.leadingAnchor.constraint(equalTo: sceneView.leadingAnchor),
+                rendererView.trailingAnchor.constraint(equalTo: sceneView.trailingAnchor),
+                rendererView.topAnchor.constraint(equalTo: sceneView.topAnchor),
+                rendererView.bottomAnchor.constraint(equalTo: sceneView.bottomAnchor)
+            ])
+            Logger.info("preview renderer view を viewer に埋め込みました")
+        }
+
+        window?.makeKeyAndOrderFront(nil)
+    }
+
     func updateFrame(_ pixelBuffer: CVPixelBuffer) {
         let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
         if nowMs - lastFrameUpdateMs < 66 {

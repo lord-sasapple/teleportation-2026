@@ -76,6 +76,12 @@ final class SenderSession: @unchecked Sendable {
         switch message {
         case .joined(let roomId, let role):
             Logger.info("signaling joined: room=\(roomId) role=\(role.rawValue)")
+            if role == .sender {
+                Logger.info("sender joined 後に offer 作成を試みます")
+                DispatchQueue.global().asyncAfter(deadline: .now() + 0.5) { [weak self] in
+                    self?.webRTC.handlePeerJoined(role: .receiver)
+                }
+            }
         case .peerJoined(let role):
             Logger.info("signaling peer-joined: role=\(role.rawValue)")
             webRTC.handlePeerJoined(role: role)
