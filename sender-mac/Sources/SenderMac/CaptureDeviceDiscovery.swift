@@ -140,7 +140,7 @@ struct CaptureDeviceDiscovery {
         for range in format.videoSupportedFrameRateRanges {
             if range.minFrameRate - tolerance <= targetFPS && targetFPS <= range.maxFrameRate + tolerance {
                 if range.minFrameRate <= targetFPS && targetFPS <= range.maxFrameRate {
-                    return (targetFPS, range.minFrameDuration)
+                    return (targetFPS, frameDuration(forFPS: targetFPS))
                 }
 
                 if abs(range.maxFrameRate - targetFPS) <= tolerance {
@@ -154,6 +154,10 @@ struct CaptureDeviceDiscovery {
         }
 
         return nil
+    }
+
+    private static func frameDuration(forFPS fps: Double) -> CMTime {
+        CMTime(value: 1_000_000, timescale: CMTimeScale((fps * 1_000_000).rounded()))
     }
 
     private static func chooseClosestBuiltinFormat(
