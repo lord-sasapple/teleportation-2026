@@ -43,8 +43,11 @@ sleep 4
 cd "$ROOT_DIR/sender-mac"
 if [[ "$RUN_SENDER_AS_APP" == "1" ]]; then
   APP_PATH="$(WEBRTC_PROVIDER="$WEBRTC_PROVIDER" ./Scripts/build-app.sh)"
+  SENDER_STDOUT="/tmp/sender-mac-${ROOM}.out"
+  SENDER_STDERR="/tmp/sender-mac-${ROOM}.err"
+  /bin/rm -f "$SENDER_STDOUT" "$SENDER_STDERR"
   echo "sender app=$APP_PATH"
-  /usr/bin/open -W -n "$APP_PATH" --args \
+  /usr/bin/open -W -n "$APP_PATH" --stdout "$SENDER_STDOUT" --stderr "$SENDER_STDERR" --args \
     --builtin-camera \
     --codec "$CODEC" \
     --width "$WIDTH" \
@@ -55,6 +58,11 @@ if [[ "$RUN_SENDER_AS_APP" == "1" ]]; then
     --room "$ROOM" \
     --duration "$DURATION" \
     --log-every 30
+
+  echo "== sender stdout =="
+  /bin/cat "$SENDER_STDOUT" 2>/dev/null || true
+  echo "== sender stderr =="
+  /bin/cat "$SENDER_STDERR" 2>/dev/null || true
 else
   WEBRTC_PROVIDER="$WEBRTC_PROVIDER" /usr/bin/xcrun swift run sender-mac \
     --builtin-camera \
