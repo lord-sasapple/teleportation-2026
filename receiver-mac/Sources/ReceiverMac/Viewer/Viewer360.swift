@@ -137,8 +137,8 @@ final class Viewer360 {
         updateCamera()
 
         interactionCount += 1
-        if interactionCount <= 3 {
-            Logger.info(String(format: "viewer camera moved: yaw=%.3f pitch=%.3f", yaw, pitch))
+        if interactionCount <= 10 || interactionCount % 30 == 0 {
+            Logger.info(String(format: "viewer camera moved: dx=%.2f dy=%.2f yaw=%.3f pitch=%.3f", deltaX, deltaY, yaw, pitch))
         }
     }
 
@@ -201,6 +201,8 @@ final class MouseLookSCNView: SCNView {
 
     private var previousPoint: NSPoint?
     private var isMouseDragging = false
+    private var localEventMonitor: Any?
+    private var inputEventCount: Int64 = 0
 
     override init(frame frameRect: NSRect, options: [String: Any]? = nil) {
         super.init(frame: frameRect, options: options)
@@ -223,28 +225,44 @@ final class MouseLookSCNView: SCNView {
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
         window?.makeFirstResponder(self)
+        if window != nil {
+            installLocalEventMonitorIfNeeded()
+        } else {
+            removeLocalEventMonitor()
+        }
+    }
+
+    deinit {
+        removeLocalEventMonitor()
     }
 
     override func mouseDown(with event: NSEvent) {
         window?.makeFirstResponder(self)
         isMouseDragging = true
         previousPoint = convert(event.locationInWindow, from: nil)
+        logInputEvent("mouseDown", event: event, dx: 0, dy: 0)
     }
 
     override func mouseDragged(with event: NSEvent) {
         let current = convert(event.locationInWindow, from: nil)
-        guard let previousPoint else {
-            self.previousPoint = current
-            return
+        let dx: Double
+        let dy: Double
+
+        if let previousPoint {
+            dx = Double(current.x - previousPoint.x)
+            dy = Double(current.y - previousPoint.y)
+        } else {
+            dx = Double(event.deltaX)
+            dy = Double(-event.deltaY)
         }
-        let dx = Double(current.x - previousPoint.x)
-        let dy = Double(current.y - previousPoint.y)
+
         onDrag?(dx, dy)
+        logInputEvent("mouseDragged", event: event, dx: dx, dy: dy)
         self.previousPoint = current
     }
 
     override func mouseUp(with event: NSEvent) {
-        _ = event
+        logInputEvent("mouseUp", event: event, dx: 0, dy: 0)
         isMouseDragging = false
         previousPoint = nil
     }
@@ -275,6 +293,7 @@ final class MouseLookSCNView: SCNView {
 
     override func scrollWheel(with event: NSEvent) {
         onZoom?(Double(event.scrollingDeltaY))
+        logInputEvent("scrollWheel", event: event, dx: Double(event.scrollingDeltaX), dy: Double(event.scrollingDeltaY))
     }
 
     override func keyDown(with event: NSEvent) {
@@ -303,6 +322,87 @@ final class MouseLookSCNView: SCNView {
             onDrag?(0, 24)
         default:
             super.keyDown(with: event)
+        }
+    }
+
+    private func installLocalEventMonitorIfNeeded() {
+        guard localEventMonitor == nil else { return }
+
+        localEventMonitor = NSEvent.addLocalMonitorForEvents(matching: [
+            .leftMouseDown,
+            .leftMouseDragged,
+            .leftMouseUp,
+            .rightMouseDown,
+            .rightMouseDragged,
+            .rightMouseUp,
+            .otherMouseDown,
+            .otherMouseDragged,
+            .otherMouseUp,
+            .scrollWheel,
+            .keyDown
+        ]) { [weak self] event in
+            guard let self else { return event }
+            guard self.shouldHandleLocally(event) else { return event }
+
+            switch event.type {
+            case .leftMouseDown, .rightMouseDown, .otherMouseDown:
+                self.window?.makeFirstResponder(self)
+                self.isMouseDragging = true
+                self.previousPoint = self.convert(event.locationInWindow, from: nil)
+                self.logInputEvent("localMouseDown", event: event, dx: 0, dy: 0)
+                return nil
+
+            case .leftMouseDragged, .rightMouseDragged, .otherMouseDragged:
+                let dx = Double(event.deltaX)
+                let dy = Double(-event.deltaY)
+                self.onDrag?(dx, dy)
+                self.logInputEvent("localMouseDragged", event: event, dx: dx, dy: dy)
+                return nil
+
+            case .leftMouseUp, .rightMouseUp, .otherMouseUp:
+                self.isMouseDragging = false
+                self.previousPoint = nil
+                self.logInputEvent("localMouseUp", event: event, dx: 0, dy: 0)
+                return nil
+
+            case .scrollWheel:
+                self.onZoom?(Double(event.scrollingDeltaY))
+                self.logInputEvent("localScrollWheel", event: event, dx: Double(event.scrollingDeltaX), dy: Double(event.scrollingDeltaY))
+                return nil
+
+            case .keyDown:
+                self.keyDown(with: event)
+                return nil
+
+            default:
+                return event
+            }
+        }
+
+        Logger.info("viewer local input monitor を開始しました")
+    }
+
+    private func removeLocalEventMonitor() {
+        if let localEventMonitor {
+            NSEvent.removeMonitor(localEventMonitor)
+            self.localEventMonitor = nil
+            Logger.info("viewer local input monitor を停止しました")
+        }
+    }
+
+    private func shouldHandleLocally(_ event: NSEvent) -> Bool {
+        guard event.window === window else { return false }
+
+        let point = convert(event.locationInWindow, from: nil)
+        guard bounds.contains(point) else { return false }
+
+        return true
+    }
+
+    private func logInputEvent(_ name: String, event: NSEvent, dx: Double, dy: Double) {
+        inputEventCount += 1
+        if inputEventCount <= 20 || inputEventCount % 60 == 0 {
+            Logger.info(String(format: "viewer input: %@ type=%@ dx=%.2f dy=%.2f firstResponder=%@", name, String(describing: event.type), dx, dy, String(describing: window?.firstResponder)))
         }
     }
 
