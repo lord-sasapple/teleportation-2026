@@ -6,7 +6,6 @@ import (
 	"flag"
 	"fmt"
 	"log"
-	"os"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -79,7 +78,7 @@ func run(ctx context.Context, cfg config) error {
 	pc.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {
 		log.Printf("PeerConnection state: %s", state.String())
 	})
-	pc.OnICEGatheringStateChange(func(state webrtc.ICEGathererState) {
+	pc.OnICEGatheringStateChange(func(state webrtc.ICEGatheringState) {
 		log.Printf("ICE gathering state: %s", state.String())
 	})
 	pc.OnICECandidate(func(c *webrtc.ICECandidate) {
