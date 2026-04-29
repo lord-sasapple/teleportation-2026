@@ -117,8 +117,11 @@ final class CapturePipeline: NSObject, AVCaptureVideoDataOutputSampleBufferDeleg
         let output = AVCaptureVideoDataOutput()
         output.alwaysDiscardsLateVideoFrames = true
         output.videoSettings = [
-            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
+            kCVPixelBufferPixelFormatTypeKey as String: kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange,
+            kCVPixelBufferWidthKey as String: Int(config.width),
+            kCVPixelBufferHeightKey as String: Int(config.height)
         ]
+        Logger.info("AVCaptureVideoDataOutput videoSettings を設定しました: NV12 \(config.width)x\(config.height)")
         output.setSampleBufferDelegate(self, queue: captureQueue)
 
         guard session.canAddOutput(output) else {
