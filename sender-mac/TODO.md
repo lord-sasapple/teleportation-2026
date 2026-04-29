@@ -1,16 +1,27 @@
 # sender-mac TODO
 
-- [ ] X5 device discovery
-- [ ] AVCaptureSession setup
-- [ ] 2880x1440/30fps format selection
-- [ ] CVPixelBuffer timestamping
-- [ ] HEVC VTCompressionSession setup
-- [ ] realtime encode
-- [ ] frame reordering off
-- [ ] H.264 fallback encoder
+- [x] SwiftPM executable setup
+- [x] X5 device discovery
+- [x] AVCaptureSession setup
+- [x] 2880x1440/30fps format selection
+- [x] CVPixelBuffer timestamping
+- [x] HEVC VTCompressionSession setup
+- [x] realtime encode
+- [x] frame reordering off
+- [x] H.264 fallback encoder
+- [x] basic signaling-worker WebSocket join/ping/leave
+- [x] typed signaling server message handling
+- [x] WebRTC adapter boundary
+- [x] DataChannel frame timestamp JSON generation
+- [x] encoded frame callback bridge
+- [ ] Xcode macOS app bundle
+- [ ] Info.plist camera usage description
+- [ ] libwebrtc native dependency strategy
 - [ ] libwebrtc PeerConnection
 - [ ] codec preference HEVC first
-- [ ] DataChannel latency messages
+- [ ] encoded frame bridge into libwebrtc video source
+- [ ] DataChannel latency message send over native libwebrtc
 - [ ] SenderStatsMonitor
+- [ ] SDP codec negotiation logging
+- [ ] selected codec stats logging
 - [ ] glass-to-glass test mode
-
