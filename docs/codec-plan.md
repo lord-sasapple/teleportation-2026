@@ -41,6 +41,6 @@ H.264 fallback は次の用途でも使います。
 
 WebRTC 実装によって HEVC/H.265 の扱いは難しい場合があります。SDP codec negotiation のログを必ず取れる設計にし、実際に選ばれた codec を stats overlay に表示します。
 
-Pion HEVC bridge では sender-mac から届く HEVC Annex B frame を低遅延キューに入れ、`fps` ticker で送信します。WAN 越し検証ではまず 1920x1080 / 6Mbps / `--queue-size 3` から始め、安定後に bitrate と解像度を段階的に上げます。
+Pion HEVC bridge では sender-mac から届く HEVC Annex B frame を低遅延キューに入れ、`fps` ticker で送信します。HEVC は P/B frame が参照チェーンを持つため、エンコード後に送信側で frame を間引くと receiver decoder が固まりやすくなります。WAN 越し検証ではまず X5 公式 Webcam Mode の 2:1 出力である 2880x1440 / 30fps を維持し、`--fps` も 30 に揃えたまま、bitrate と keyframe interval で負荷を落とします。
 
 HEVC で交渉やデコードに失敗した場合でも、設計、docs、型定義では HEVC first を維持します。そのうえで H.264 fallback で MVP を成立させ、TODO に HEVC 再検証項目を残します。
