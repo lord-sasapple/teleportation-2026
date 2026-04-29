@@ -73,7 +73,7 @@ CODEC=hevc DURATION=600 bash scripts/run-remote-receiver.sh pion-routeb-wan-001
 DEVICE_ID="0x1000002e1a0005" ./scripts/run-pion-hevc-sender.sh pion-routeb-wan-001
 ```
 
-既定は WAN 初手向けに `1920x960 / 5Mbps / 30fps / aspect 2:1` です。かくつく場合は `BITRATE=3000000`、安定したら `BITRATE=6000000` や `WIDTH=2880 HEIGHT=1440` へ上げます。X5 の 360 equirectangular は横:縦 = `2:1` なので、script は sender-mac に `--require-aspect-ratio 2:1` を渡します。
+Insta360 公式の X5 OBS 手順では、Webcam Mode で capture device の解像度を `2880x1440`、FPS を `30` にすると 360° 2:1 panoramic output になると案内されています。script の既定も `2880x1440 / 6Mbps / 30fps / aspect 2:1` です。かくつく場合は `BITRATE=3000000` や `QUEUE_SIZE=2` を試します。
 
 手動で分けて起動する場合:
 
@@ -86,11 +86,11 @@ go run . --room pion-routeb-wan-001 --duration 600 --listen-frames 127.0.0.1:500
 cd sender-mac
 WEBRTC_PROVIDER=livekit swift run sender-mac \
   --codec hevc \
-  --width 1920 \
-  --height 960 \
+  --width 2880 \
+  --height 1440 \
   --require-aspect-ratio 2:1 \
   --fps 30 \
-  --bitrate 5000000 \
+  --bitrate 6000000 \
   --duration 600 \
   --pion-frame-socket 127.0.0.1:5005
 ```
