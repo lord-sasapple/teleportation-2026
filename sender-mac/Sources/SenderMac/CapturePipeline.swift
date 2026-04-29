@@ -9,6 +9,9 @@ final class CapturePipeline: NSObject, AVCaptureVideoDataOutputSampleBufferDeleg
     private let encoder: VideoEncoder
     private let statsMonitor: SenderStatsMonitor
     private var sequence: Int64 = 0
+    private var droppedCaptureFrames: Int64 = 0
+    private var nextAcceptedMonotonicMs: Double?
+    private var lastDropLogMonotonicMs: Double = 0
     private var isRunning = false
     private var rawFrameHandler: (@Sendable (RawVideoFrame) -> Void)?
     private var stopHandler: (@Sendable () -> Void)?
@@ -66,6 +69,25 @@ final class CapturePipeline: NSObject, AVCaptureVideoDataOutputSampleBufferDeleg
     }
 
     func captureOutput(_ output: AVCaptureOutput, didOutput sampleBuffer: CMSampleBuffer, from connection: AVCaptureConnection) {
+        let nowMonotonicMs = Clock.monotonicMs()
+        let targetFrameIntervalMs = 1000.0 / Double(max(config.fps, 1))
+        if let nextAcceptedMonotonicMs,
+           nowMonotonicMs + 0.5 < nextAcceptedMonotonicMs {
+            droppedCaptureFrames += 1
+            if nowMonotonicMs - lastDropLogMonotonicMs >= 1000 {
+                Logger.info("capture fps gate dropped=\(droppedCaptureFrames) targetFps=\(config.fps)")
+                lastDropLogMonotonicMs = nowMonotonicMs
+            }
+            return
+        }
+
+        if let nextAcceptedMonotonicMs,
+           nowMonotonicMs <= nextAcceptedMonotonicMs + targetFrameIntervalMs {
+            self.nextAcceptedMonotonicMs = nextAcceptedMonotonicMs + targetFrameIntervalMs
+        } else {
+            self.nextAcceptedMonotonicMs = nowMonotonicMs + targetFrameIntervalMs
+        }
+
         sequence += 1
         let currentSequence = sequence
         let captureTimeMs = Clock.wallTimeMs()
