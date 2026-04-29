@@ -121,7 +121,6 @@ func run(ctx context.Context, cfg config) error {
 		log.Printf("signaling send: ice-candidate mid=%s mline=%d", derefString(init.SDPMid), derefUint16(init.SDPMLineIndex))
 	})
 
-	var err error
 	h265Track, err = addH265Track(pc)
 	if err != nil {
 		return err
