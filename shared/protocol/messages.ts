@@ -48,6 +48,13 @@ export interface LatencyEchoMessage {
   receiverTimeMs: number;
 }
 
+export interface ReceiverLogMessage {
+  type: "receiver-log";
+  level: "INFO" | "WARN" | "ERROR";
+  message: string;
+  timestampMs: number;
+}
+
 export type ClientMessage =
   | JoinMessage
   | OfferMessage
@@ -56,7 +63,8 @@ export type ClientMessage =
   | LeaveMessage
   | PingMessage
   | LatencySyncMessage
-  | LatencyEchoMessage;
+  | LatencyEchoMessage
+  | ReceiverLogMessage;
 
 export interface JoinedMessage {
   type: "joined";
@@ -93,7 +101,8 @@ export type ServerMessage =
   | PongMessage
   | ErrorMessage
   | LatencySyncMessage
-  | LatencyEchoMessage;
+  | LatencyEchoMessage
+  | ReceiverLogMessage;
 
 export function isRole(value: unknown): value is Role {
   return value === "sender" || value === "receiver";
@@ -142,6 +151,16 @@ export function isLatencyEchoMessage(value: unknown): value is LatencyEchoMessag
   );
 }
 
+export function isReceiverLogMessage(value: unknown): value is ReceiverLogMessage {
+  return (
+    isRecord(value) &&
+    value.type === "receiver-log" &&
+    (value.level === "INFO" || value.level === "WARN" || value.level === "ERROR") &&
+    typeof value.message === "string" &&
+    typeof value.timestampMs === "number"
+  );
+}
+
 export function isClientMessage(value: unknown): value is ClientMessage {
   if (!isRecord(value) || typeof value.type !== "string") {
     return false;
@@ -162,6 +181,8 @@ export function isClientMessage(value: unknown): value is ClientMessage {
       return isLatencySyncMessage(value);
     case "latency-echo":
       return isLatencyEchoMessage(value);
+    case "receiver-log":
+      return isReceiverLogMessage(value);
     default:
       return false;
   }

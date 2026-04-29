@@ -27,6 +27,7 @@ enum SignalingClientMessage: Sendable {
     case join(roomId: String, role: SignalingRole)
     case answer(sdp: String)
     case iceCandidate(IceCandidatePayload)
+    case receiverLog(level: String, message: String, timestampMs: Int64)
     case leave
     case ping
 
@@ -35,6 +36,7 @@ enum SignalingClientMessage: Sendable {
         case .join: return "join"
         case .answer: return "answer"
         case .iceCandidate: return "ice-candidate"
+        case .receiverLog: return "receiver-log"
         case .leave: return "leave"
         case .ping: return "ping"
         }
@@ -59,6 +61,13 @@ enum SignalingClientMessage: Sendable {
                 candidateObject["sdpMLineIndex"] = sdpMLineIndex
             }
             return ["type": "ice-candidate", "candidate": candidateObject]
+        case .receiverLog(let level, let message, let timestampMs):
+            return [
+                "type": "receiver-log",
+                "level": level,
+                "message": message,
+                "timestampMs": timestampMs
+            ]
         case .leave:
             return ["type": "leave"]
         case .ping:

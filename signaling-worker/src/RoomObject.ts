@@ -186,6 +186,18 @@ export class RoomObject implements DurableObject {
           receiverTimeMs: message.receiverTimeMs
         });
         return;
+
+      case "receiver-log":
+        if (!this.requireRole(ws, attachment.role, "receiver", "receiver-log")) {
+          return;
+        }
+        this.forwardToPeer(ws, attachment, {
+          type: "receiver-log",
+          level: message.level,
+          message: message.message.slice(0, 2000),
+          timestampMs: message.timestampMs
+        });
+        return;
     }
   }
 
@@ -283,4 +295,3 @@ export class RoomObject implements DurableObject {
     }
   }
 }
-

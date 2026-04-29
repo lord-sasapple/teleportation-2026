@@ -25,6 +25,8 @@ type signalMessage struct {
 	Role      string          `json:"role,omitempty"`
 	SDP       string          `json:"sdp,omitempty"`
 	Candidate *candidateValue `json:"candidate,omitempty"`
+	Level     string          `json:"level,omitempty"`
+	Timestamp int64           `json:"timestampMs,omitempty"`
 	Message   string          `json:"message,omitempty"`
 }
 
@@ -413,31 +415,25 @@ func handleFrameConn(ctx context.Context, track *webrtc.TrackLocalStaticSample, 
 			log.Printf("frame stream stopped: sent=%d skipped=%d queue=%d", sent, skipped, len(frameQueue))
 			return
 		case <-ticker.C:
-			var frame []byte
-			var keyframe bool
-			for {
-				select {
-				case queuedFrame, ok := <-frameQueue:
-					if !ok {
-						log.Printf("frame stream stopped: sent=%d skipped=%d queue=%d", sent, skipped, len(frameQueue))
-						return
-					}
-					if frame == nil || queuedFrame.keyframe {
-						frame = queuedFrame.data
-						keyframe = queuedFrame.keyframe
-					} else if !keyframe {
-						frame = queuedFrame.data
-					}
-				default:
-					goto drained
+			var queued queuedFrame
+			select {
+			case queuedFrame, ok := <-frameQueue:
+				if !ok {
+					log.Printf("frame stream stopped: sent=%d skipped=%d queue=%d", sent, skipped, len(frameQueue))
+					return
 				}
+				queued = queuedFrame
+			case <-ctx.Done():
+				log.Printf("frame stream stopped: sent=%d skipped=%d queue=%d", sent, skipped, len(frameQueue))
+				return
+			default:
+				continue
 			}
-		drained:
-			if frame == nil {
+			if len(queued.data) == 0 {
 				continue
 			}
 
-			lastBytes = len(frame)
+			lastBytes = len(queued.data)
 			if mediaReady != nil && !mediaReady.Load() {
 				skipped++
 				if skipped%30 == 0 {
@@ -447,7 +443,7 @@ func handleFrameConn(ctx context.Context, track *webrtc.TrackLocalStaticSample, 
 			}
 
 			if err := track.WriteSample(media.Sample{
-				Data:     frame,
+				Data:     queued.data,
 				Duration: frameDuration,
 			}); err != nil {
 				log.Printf("frame write sample failed: %v", err)
@@ -455,11 +451,11 @@ func handleFrameConn(ctx context.Context, track *webrtc.TrackLocalStaticSample, 
 			}
 
 			sent++
-			if keyframe {
+			if queued.keyframe {
 				sentKeyframes++
 			}
 			if sent%30 == 0 {
-				log.Printf("frame samples sent=%d keyframes=%d lastBytes=%d keyframe=%t queue=%d skipped=%d", sent, sentKeyframes, lastBytes, keyframe, len(frameQueue), skipped)
+				log.Printf("frame samples sent=%d keyframes=%d lastBytes=%d keyframe=%t queue=%d skipped=%d", sent, sentKeyframes, lastBytes, queued.keyframe, len(frameQueue), skipped)
 			}
 		}
 	}
@@ -658,6 +654,12 @@ func handleSignal(ctx context.Context, c *websocket.Conn, pc *webrtc.PeerConnect
 		return fmt.Errorf("signaling error: %s", msg.Message)
 	case "peer-left":
 		log.Printf("signaling recv: peer-left role=%s", msg.Role)
+	case "receiver-log":
+		level := msg.Level
+		if level == "" {
+			level = "INFO"
+		}
+		log.Printf("receiver log [%s] %s", level, msg.Message)
 	default:
 		log.Printf("signaling recv: unknown type=%s raw=%s", msg.Type, string(data))
 	}

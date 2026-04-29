@@ -18,6 +18,10 @@ final class ReceiverApp: @unchecked Sendable {
     }
 
     func run() {
+        Logger.mirror = { [weak self] level, message in
+            self?.signalingClient.sendReceiverLog(level: level, message: message)
+        }
+
         Logger.info("receiver-mac を起動します")
         Logger.info("room=\(config.roomId) codec=\(config.preferredCodec) signalingOnly=\(config.signalingOnly)")
         Logger.info("iceServers=\(config.iceServers.joined(separator: ","))")
@@ -161,6 +165,7 @@ final class ReceiverApp: @unchecked Sendable {
         running = false
         Logger.info("receiver-mac を停止します")
         signalingClient.disconnect()
+        Logger.mirror = nil
         webRTC.stop()
         Task { @MainActor in
             self.viewer?.stop()

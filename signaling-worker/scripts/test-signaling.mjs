@@ -149,6 +149,15 @@ async function main() {
   });
   await sender.next((message) => message.type === "latency-echo" && message.sequence === 1, "latency-echo");
 
+  receiver.send({
+    type: "receiver-log",
+    level: "INFO",
+    message: "receiver stats inbound-rtp test",
+    timestampMs: Date.now()
+  });
+  const receiverLog = await sender.next((message) => message.type === "receiver-log", "receiver-log");
+  assert(receiverLog.message.includes("receiver stats"), "receiver-log was not forwarded");
+
   const duplicateSender = await new TestSocket("sender").open();
   await duplicateSender.next((message) => message.type === "error" && message.message.includes("duplicate"), "duplicate sender error");
 

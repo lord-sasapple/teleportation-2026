@@ -16,7 +16,8 @@
     { "$ref": "#/$defs/pong" },
     { "$ref": "#/$defs/error" },
     { "$ref": "#/$defs/latencySync" },
-    { "$ref": "#/$defs/latencyEcho" }
+    { "$ref": "#/$defs/latencyEcho" },
+    { "$ref": "#/$defs/receiverLog" }
   ],
   "$defs": {
     "role": {
@@ -151,7 +152,17 @@
         "senderTimeMs": { "type": "number" },
         "receiverTimeMs": { "type": "number" }
       }
+    },
+    "receiverLog": {
+      "type": "object",
+      "required": ["type", "level", "message", "timestampMs"],
+      "additionalProperties": true,
+      "properties": {
+        "type": { "const": "receiver-log" },
+        "level": { "type": "string", "enum": ["INFO", "WARN", "ERROR"] },
+        "message": { "type": "string" },
+        "timestampMs": { "type": "number" }
+      }
     }
   }
 }
-

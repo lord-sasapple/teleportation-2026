@@ -41,6 +41,15 @@ final class SignalingClient: @unchecked Sendable {
         send(.iceCandidate(candidate))
     }
 
+    func sendReceiverLog(level: LogLevel, message: String) {
+        let trimmed = String(message.prefix(2000))
+        send(.receiverLog(
+            level: level.rawValue,
+            message: trimmed,
+            timestampMs: Int64(Date().timeIntervalSince1970 * 1000)
+        ))
+    }
+
     private func receiveLoop() {
         task?.receive { [weak self] result in
             guard let self else { return }
@@ -73,7 +82,9 @@ final class SignalingClient: @unchecked Sendable {
                 return
             }
 
-            Logger.info("signaling 送信: \(message.logType)")
+            if message.logType != "receiver-log" {
+                Logger.info("signaling 送信: \(message.logType)")
+            }
             task.send(.string(text)) { error in
                 if let error {
                     Logger.warn("signaling 送信に失敗しました: \(error.localizedDescription)")
