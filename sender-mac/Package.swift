@@ -17,7 +17,7 @@ if useLiveKitWebRTC {
     dependencies.append(
         .package(
             url: "https://github.com/livekit/webrtc-xcframework.git",
-            exact: "144.7559.04"
+            exact: "137.7151.03"
         )
     )
     senderDependencies.append(.product(name: "LiveKitWebRTC", package: "webrtc-xcframework"))
