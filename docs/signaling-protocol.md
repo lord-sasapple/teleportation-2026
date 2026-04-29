@@ -29,6 +29,7 @@ client -> server:
 | `ping` | sender/receiver | `pong` を返す |
 | `latency-sync` | sender/receiver | 測定用 sync を相手へ転送 |
 | `latency-echo` | sender/receiver | 測定用 echo を相手へ転送 |
+| `receiver-log` | receiver | receiver の診断ログを sender へ転送 |
 
 server -> client:
 
@@ -44,6 +45,7 @@ server -> client:
 | `error` | バリデーション、重複 role、相手未接続などのエラー |
 | `latency-sync` | 相手からの latency sync |
 | `latency-echo` | 相手からの latency echo |
+| `receiver-log` | receiver から sender への診断ログ |
 
 ## role 別に送れるメッセージ
 
@@ -51,6 +53,7 @@ server -> client:
 - receiver は `answer` を送れます。
 - `ice-candidate` は sender/receiver の両方が送れます。
 - `latency-sync` と `latency-echo` は sender/receiver の両方が送れます。
+- `receiver-log` は receiver だけが送れます。小さい診断テキストのみを扱い、media path には使いません。
 - `leave` と `ping` は sender/receiver の両方が送れます。
 
 role 不一致の場合は `error` を返します。
@@ -108,4 +111,3 @@ sequenceDiagram
 ```
 
 これは signaling 経路の軽量制御メッセージ確認用です。実際の映像遅延測定では WebRTC DataChannel の `frame-timestamp` を本命にします。
-
