@@ -1,3 +1,4 @@
+import AppKit
 import CoreVideo
 import Foundation
 
@@ -5,6 +6,7 @@ protocol ReceiverWebRTCAdapter: AnyObject {
     var onLocalAnswer: ((String) -> Void)? { get set }
     var onLocalIceCandidate: ((IceCandidatePayload) -> Void)? { get set }
     var onFrame: ((CVPixelBuffer) -> Void)? { get set }
+    var onPreviewRendererView: ((NSView) -> Void)? { get set }
 
     func start()
     func stop()
