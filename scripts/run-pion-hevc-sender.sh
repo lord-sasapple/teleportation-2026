@@ -8,14 +8,15 @@ SIGNALING_URL="${SIGNALING_URL:-wss://x5-webrtc-signaling.lord-sasapple.workers.
 ROOM="${1:-${ROOM:-}}"
 DURATION="${DURATION:-600}"
 WIDTH="${WIDTH:-1920}"
-HEIGHT="${HEIGHT:-1080}"
+HEIGHT="${HEIGHT:-960}"
 FPS="${FPS:-30}"
-BITRATE="${BITRATE:-6000000}"
+BITRATE="${BITRATE:-5000000}"
 QUEUE_SIZE="${QUEUE_SIZE:-3}"
 PION_FRAME_SOCKET="${PION_FRAME_SOCKET:-127.0.0.1:5005}"
 WEBRTC_PROVIDER="${WEBRTC_PROVIDER:-livekit}"
 DEVICE_ID="${DEVICE_ID:-}"
 USE_BUILTIN_CAMERA="${USE_BUILTIN_CAMERA:-0}"
+REQUIRE_ASPECT_RATIO="${REQUIRE_ASPECT_RATIO:-2:1}"
 
 if [[ -z "$ROOM" ]]; then
   echo "usage: ./scripts/run-pion-hevc-sender.sh <room-id>"
@@ -35,7 +36,7 @@ echo "== Teleportation Pion HEVC sender =="
 echo "room=$ROOM"
 echo "signaling=$SIGNALING_URL"
 echo "frames=$PION_FRAME_SOCKET queue-size=$QUEUE_SIZE"
-echo "codec=hevc ${WIDTH}x${HEIGHT}@${FPS}fps bitrate=$BITRATE duration=${DURATION}s"
+echo "codec=hevc ${WIDTH}x${HEIGHT}@${FPS}fps bitrate=$BITRATE duration=${DURATION}s aspect=$REQUIRE_ASPECT_RATIO"
 
 (
   cd "$ROOT_DIR/tools/pion-hevc-sender"
@@ -58,6 +59,7 @@ SENDER_ARGS=(
   --codec hevc
   --width "$WIDTH"
   --height "$HEIGHT"
+  --require-aspect-ratio "$REQUIRE_ASPECT_RATIO"
   --fps "$FPS"
   --bitrate "$BITRATE"
   --duration "$DURATION"

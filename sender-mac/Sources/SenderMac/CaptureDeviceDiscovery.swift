@@ -64,6 +64,14 @@ struct CaptureDeviceDiscovery {
     }
 
     static func configureFormat(device: AVCaptureDevice, config: AppConfig) throws {
+        if let requiredAspectRatio = config.requiredAspectRatio,
+           !requiredAspectRatio.matches(width: config.width, height: config.height) {
+            throw ConfigError.invalidValue(
+                "--require-aspect-ratio",
+                "requested=\(config.width)x\(config.height) は \(requiredAspectRatio.label) ではありません"
+            )
+        }
+
         guard let selection = chooseFormat(device: device, config: config) else {
             throw SenderError.noMatchingFormat(deviceName: device.localizedName, width: config.width, height: config.height, fps: config.fps)
         }
@@ -81,6 +89,9 @@ struct CaptureDeviceDiscovery {
         if !selection.isExactMatch {
             Logger.warn("要求 format が見つからないため近い format を使います: requested=\(config.width)x\(config.height)@\(config.fps)fps actual=\(dimensions.width)x\(dimensions.height)@\(String(format: "%.2f", selection.fps))fps")
         }
+        if let requiredAspectRatio = config.requiredAspectRatio {
+            Logger.info("capture aspect ratio requirement satisfied: \(requiredAspectRatio.label)")
+        }
         Logger.info("capture format を設定しました: \(dimensions.width)x\(dimensions.height) @ \(String(format: "%.2f", selection.fps))fps")
     }
 
@@ -90,6 +101,10 @@ struct CaptureDeviceDiscovery {
         let matches = device.formats.compactMap { format -> FormatSelection? in
             let dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
             guard dimensions.width == config.width && dimensions.height == config.height else {
+                return nil
+            }
+            if let requiredAspectRatio = config.requiredAspectRatio,
+               !requiredAspectRatio.matches(width: dimensions.width, height: dimensions.height) {
                 return nil
             }
 
@@ -110,7 +125,13 @@ struct CaptureDeviceDiscovery {
             return nil
         }
 
-        return chooseClosestBuiltinFormat(device: device, targetWidth: config.width, targetHeight: config.height, targetFPS: config.fps)
+        return chooseClosestBuiltinFormat(
+            device: device,
+            targetWidth: config.width,
+            targetHeight: config.height,
+            targetFPS: config.fps,
+            requiredAspectRatio: config.requiredAspectRatio
+        )
     }
 
     private static func supportedFPS(for format: AVCaptureDevice.Format, targetFPS: Double) -> (fps: Double, frameDuration: CMTime)? {
@@ -135,7 +156,13 @@ struct CaptureDeviceDiscovery {
         return nil
     }
 
-    private static func chooseClosestBuiltinFormat(device: AVCaptureDevice, targetWidth: Int32, targetHeight: Int32, targetFPS: Int32) -> FormatSelection? {
+    private static func chooseClosestBuiltinFormat(
+        device: AVCaptureDevice,
+        targetWidth: Int32,
+        targetHeight: Int32,
+        targetFPS: Int32,
+        requiredAspectRatio: AspectRatio?
+    ) -> FormatSelection? {
         let candidates = device.formats.compactMap { format -> (format: AVCaptureDevice.Format, dimensions: CMVideoDimensions, fps: Double, frameDuration: CMTime, supportsTargetFPS: Bool)? in
             let ranges = format.videoSupportedFrameRateRanges
             guard let bestRange = ranges.max(by: { $0.maxFrameRate < $1.maxFrameRate }) else {
@@ -146,6 +173,10 @@ struct CaptureDeviceDiscovery {
             let selectedFPS = selectedTargetFPS?.fps ?? max(1.0, bestRange.maxFrameRate)
             let frameDuration = selectedTargetFPS?.frameDuration ?? bestRange.minFrameDuration
             let dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
+            if let requiredAspectRatio,
+               !requiredAspectRatio.matches(width: dimensions.width, height: dimensions.height) {
+                return nil
+            }
             return (format, dimensions, selectedFPS, frameDuration, supportsTargetFPS)
         }
 
