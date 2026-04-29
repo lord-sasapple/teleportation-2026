@@ -6,6 +6,7 @@ final class SenderSession: @unchecked Sendable {
     private let signalingClient: SignalingClient?
     private var statsMonitor: SenderStatsMonitor?
     private var didScheduleInitialOffer = false
+    private var running = false
     private let glassToGlassTestMode: GlassToGlassTestMode
 
     init(config: AppConfig) {
@@ -41,16 +42,29 @@ final class SenderSession: @unchecked Sendable {
     }
 
     func start() {
+        running = true
         webRTC.start()
         signalingClient?.onMessage = { [weak self] message in
             self?.handleSignalingMessage(message)
         }
         signalingClient?.connect()
+        statsLoop()
     }
 
     func stop() {
+        running = false
         signalingClient?.disconnect()
         webRTC.stop()
+    }
+
+    private func statsLoop() {
+        DispatchQueue.global().async { [weak self] in
+            guard let self else { return }
+            while self.running {
+                self.webRTC.pollStats()
+                Thread.sleep(forTimeInterval: 2.0)
+            }
+        }
     }
 
     func handleRawFrame(_ frame: RawVideoFrame) {

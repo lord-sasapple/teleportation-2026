@@ -172,6 +172,87 @@ final class LiveKitWebRTCSenderAdapter: NSObject, WebRTCSenderAdapter, @unchecke
         receivedDataChannelHandler = handler
     }
 
+    func pollStats() {
+        guard let peerConnection else {
+            Logger.info("sender stats: PeerConnection 未作成")
+            return
+        }
+
+        peerConnection.statistics { report in
+            let lines = Self.senderStatsSummaries(from: report)
+            if lines.isEmpty {
+                Logger.info("sender stats: outbound/video 情報なし")
+            } else {
+                for line in lines.prefix(16) {
+                    Logger.info(line)
+                }
+            }
+        }
+    }
+
+    private static func senderStatsSummaries(from report: LKRTCStatisticsReport) -> [String] {
+        report.statistics.values
+            .sorted { lhs, rhs in
+                if lhs.type == rhs.type {
+                    return lhs.id < rhs.id
+                }
+                return lhs.type < rhs.type
+            }
+            .compactMap { senderStatsSummary(for: $0) }
+    }
+
+    private static func senderStatsSummary(for stat: LKRTCStatistics) -> String? {
+        let values = stat.values
+
+        func value(_ keys: [String]) -> String? {
+            for key in keys {
+                if let v = values[key] as? NSString {
+                    return v as String
+                }
+                if let v = values[key] as? String {
+                    return v
+                }
+                if let v = values[key] as? NSNumber {
+                    return v.stringValue
+                }
+            }
+            return nil
+        }
+
+        switch stat.type {
+        case "outbound-rtp":
+            guard value(["kind", "mediaType"]) == "video" || stat.id.lowercased().contains("video") else {
+                return nil
+            }
+
+            let width = value(["frameWidth"]) ?? "-"
+            let height = value(["frameHeight"]) ?? "-"
+            let fps = value(["framesPerSecond"]) ?? "-"
+            let framesEncoded = value(["framesEncoded"]) ?? "-"
+            let framesSent = value(["framesSent"]) ?? "-"
+            let keyFrames = value(["keyFramesEncoded"]) ?? "-"
+            let bytesSent = value(["bytesSent"]) ?? "-"
+            let totalEncode = value(["totalEncodeTime"]) ?? "-"
+            let qualityReason = value(["qualityLimitationReason"]) ?? "-"
+            let encoder = value(["encoderImplementation"]) ?? "-"
+            let targetBitrate = value(["targetBitrate"]) ?? value(["mediaSourceId"]) ?? "-"
+            return "sender stats outbound-rtp: id=\(stat.id) size=\(width)x\(height) fps=\(fps) framesEncoded=\(framesEncoded) framesSent=\(framesSent) keyFrames=\(keyFrames) bytesSent=\(bytesSent) totalEncodeTime=\(totalEncode) qualityLimitation=\(qualityReason) targetBitrate=\(targetBitrate) encoder=\(encoder)"
+        case "codec":
+            let mime = value(["mimeType"]) ?? ""
+            guard mime.lowercased().contains("video") || mime.uppercased().contains("H264") || mime.uppercased().contains("H265") || mime.uppercased().contains("HEVC") || mime.uppercased().contains("AV1") else {
+                return nil
+            }
+            return "sender stats codec: id=\(stat.id) mime=\(mime) payload=\(value(["payloadType"]) ?? "-")"
+        case "media-source":
+            guard value(["kind"]) == "video" || stat.id.lowercased().contains("video") else {
+                return nil
+            }
+            return "sender stats media-source: id=\(stat.id) width=\(value(["width"]) ?? "-") height=\(value(["height"]) ?? "-") fps=\(value(["framesPerSecond"]) ?? "-")"
+        default:
+            return nil
+        }
+    }
+
     private func ensurePeerConnection() {
         guard peerConnection == nil else {
             return
@@ -193,6 +274,7 @@ final class LiveKitWebRTCSenderAdapter: NSObject, WebRTCSenderAdapter, @unchecke
 
         let source = factory.videoSource()
         source.adaptOutputFormat(toWidth: config.width, height: config.height, fps: config.fps)
+        Logger.info("LiveKitWebRTC videoSource adaptOutputFormat: \(config.width)x\(config.height)@\(config.fps)fps")
         let capturer = LKRTCVideoCapturer(delegate: source)
         let track = factory.videoTrack(with: source, trackId: "x5-video")
         createdPeerConnection.add(track, streamIds: ["x5-stream"])

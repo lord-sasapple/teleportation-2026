@@ -27,6 +27,7 @@ protocol WebRTCSenderAdapter: Sendable {
     func sendEncodedFrame(_ frame: EncodedVideoFrame)
     func sendFrameTimestamp(_ message: FrameTimestampMessage)
     func setReceivedDataChannelHandler(_ handler: @escaping @Sendable (Data) -> Void)
+    func pollStats()
 }
 
 final class NativeWebRTCSenderUnavailableAdapter: WebRTCSenderAdapter, @unchecked Sendable {
@@ -90,5 +91,9 @@ final class NativeWebRTCSenderUnavailableAdapter: WebRTCSenderAdapter, @unchecke
 
     func setReceivedDataChannelHandler(_ handler: @escaping @Sendable (Data) -> Void) {
         _ = handler
+    }
+
+    func pollStats() {
+        Logger.info("sender stats: native WebRTC 未接続")
     }
 }
