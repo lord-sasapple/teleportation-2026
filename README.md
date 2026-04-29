@@ -2,7 +2,7 @@
 
 Insta360 X5, MacBook M3, HEVC/H.265, WebRTC 1:1 P2P, and Quest 3 を使う低遅延 360 度テレプレゼンス MVP です。
 
-この初期実装では、Cloudflare Workers + Durable Objects の signaling-worker と、共有プロトコル、設計ドキュメント、sender/receiver の README/TODO を用意しています。映像と音声は signaling-worker を通りません。
+現在の実装では、Cloudflare Workers + Durable Objects の signaling-worker、共有プロトコル、sender-mac の capture/encode/WebRTC 送信骨格、receiver-quest の Unity/signaling/overlay/rendering skeleton を用意しています。映像と音声は signaling-worker を通りません。
 
 ## 構成
 
@@ -40,3 +40,22 @@ npm test
 
 詳細は [signaling-worker/README.md](signaling-worker/README.md) を参照してください。
 
+## sender-mac smoke
+
+カメラなしで Cloudflare signaling へ接続確認できます。
+
+```bash
+cd sender-mac
+WEBRTC_PROVIDER=livekit ./Scripts/run-signaling-only.sh
+```
+
+X5 接続後は device list と HEVC/H.264 比較を実行します。
+
+```bash
+WEBRTC_PROVIDER=livekit ./Scripts/run-sender-smoke.sh
+WEBRTC_PROVIDER=livekit DURATION=60 ./Scripts/run-codec-comparison.sh
+```
+
+## receiver-quest
+
+Unity 2022.3 LTS 以降で `receiver-quest` を開きます。現時点では Android native libwebrtc / MediaCodec 実装前の skeleton で、signaling、DataChannel timestamp 処理、stats overlay、inside-out sphere renderer まで入っています。

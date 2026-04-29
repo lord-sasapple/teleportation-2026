@@ -12,6 +12,7 @@
 - [x] basic signaling-worker WebSocket join/ping/leave
 - [x] typed signaling server message handling
 - [x] WebRTC adapter boundary
+- [x] signaling-only smoke mode
 - [x] DataChannel frame timestamp JSON generation
 - [x] encoded frame callback bridge
 - [x] optional WebRTC.xcframework SwiftPM binary target wiring
@@ -33,6 +34,6 @@
 - [ ] verify HEVC/H.265 negotiation with Quest receiver
 - [ ] DataChannel latency message end-to-end with receiver
 - [ ] SenderStatsMonitor
-- [ ] SDP codec negotiation logging
+- [x] SDP codec negotiation logging
 - [ ] selected codec stats logging
 - [ ] glass-to-glass test mode

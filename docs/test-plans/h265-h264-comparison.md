@@ -15,6 +15,21 @@ curl https://x5-webrtc-signaling.lord-sasapple.workers.dev/healthz
 
 ## Sender Smoke Test
 
+Without camera:
+
+```bash
+cd sender-mac
+WEBRTC_PROVIDER=livekit ./Scripts/run-signaling-only.sh
+```
+
+Confirm:
+
+- sender-mac starts.
+- signaling-worker returns `joined` and `pong`.
+- no media relay is used.
+
+With X5 camera:
+
 ```bash
 cd sender-mac
 WEBRTC_PROVIDER=livekit ./Scripts/run-sender-smoke.sh
@@ -122,4 +137,3 @@ WEBRTC_PROVIDER=livekit DURATION=60 ./Scripts/run-codec-comparison.sh
 - If HEVC fails, H.264 fallback establishes P2P.
 - Receiver overlay shows codec, decoder, frame rate, dropped frames, and latency.
 - Final latency number comes from glass-to-glass measurement.
-
