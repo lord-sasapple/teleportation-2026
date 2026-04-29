@@ -35,6 +35,7 @@ struct AppConfig {
     var signalingBaseURL: URL?
     var roomId: String?
     var iceServers: [String] = ["stun:stun.l.google.com:19302"]
+    var pionFrameSocket: String?
 
     static func parse(arguments: [String] = CommandLine.arguments) throws -> AppConfig {
         var config = AppConfig()
@@ -103,6 +104,8 @@ struct AppConfig {
                     config.iceServers.removeAll()
                 }
                 config.iceServers.append(server)
+            case "--pion-frame-socket":
+                config.pionFrameSocket = try value(after: arg)
             case "--help", "-h":
                 throw ConfigError.helpRequested
             default:
@@ -144,6 +147,7 @@ struct AppConfig {
           --signaling-url <wss://...>    signaling-worker の base URL
           --room <roomId>                signaling-worker roomId
           --ice-server <url>             ICE server URL。複数指定可。既定: stun:stun.l.google.com:19302
+          --pion-frame-socket <host:port> HEVC encoded frames をGo/PionへTCP送信する
 
         Examples:
           swift run sender-mac --list-devices

@@ -55,6 +55,16 @@ struct SenderMacCommand {
         try CaptureDeviceDiscovery.configureFormat(device: device, config: config)
 
         let senderSession = SenderSession(config: config)
+        let pionFrameSocketClient: PionFrameSocketClient?
+        if let address = config.pionFrameSocket {
+            pionFrameSocketClient = try PionFrameSocketClient(address: address)
+            pionFrameSocketClient?.start()
+            Logger.info("Pion frame socket bridge を開始しました: \(address)")
+        } else {
+            pionFrameSocketClient = nil
+        }
+        defer { pionFrameSocketClient?.stop() }
+
         senderSession.start()
 
         let stopController = StopController()
@@ -69,6 +79,7 @@ struct SenderMacCommand {
             },
             encodedFrameHandler: { frame in
                 senderSession.handleEncodedFrame(frame)
+                pionFrameSocketClient?.send(frame: frame)
             },
             stopHandler: {
                 stopController.requestStop(reason: "max-frames に到達")
@@ -101,6 +112,16 @@ struct SenderMacCommand {
         }
 
         let senderSession = SenderSession(config: config)
+        let pionFrameSocketClient: PionFrameSocketClient?
+        if let address = config.pionFrameSocket {
+            pionFrameSocketClient = try PionFrameSocketClient(address: address)
+            pionFrameSocketClient?.start()
+            Logger.info("Pion frame socket bridge を開始しました: \(address)")
+        } else {
+            pionFrameSocketClient = nil
+        }
+        defer { pionFrameSocketClient?.stop() }
+
         senderSession.start()
 
         let stopController = StopController()

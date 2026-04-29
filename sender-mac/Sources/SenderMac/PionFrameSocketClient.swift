@@ -12,7 +12,7 @@ final class PionFrameSocketClient: @unchecked Sendable {
     init(address: String) throws {
         let parts = address.split(separator: ":", maxSplits: 1).map(String.init)
         guard parts.count == 2, let parsedPort = UInt16(parts[1]), let nwPort = NWEndpoint.Port(rawValue: parsedPort) else {
-            throw SenderError.runtime("invalid pion frame socket address: \(address)")
+            throw ConfigError.invalidValue("--pion-frame-socket", "host:port として解釈できません: \(address)")
         }
         host = NWEndpoint.Host(parts[0])
         port = nwPort
