@@ -73,6 +73,8 @@ CODEC=hevc DURATION=600 bash scripts/run-remote-receiver.sh pion-routeb-wan-001
 DEVICE_ID="0x1000002e1a0005" ./scripts/run-pion-hevc-sender.sh pion-routeb-wan-001
 ```
 
+既定は WAN 初手向けに `1920x960 / 5Mbps / 30fps / aspect 2:1` です。かくつく場合は `BITRATE=3000000`、安定したら `BITRATE=6000000` や `WIDTH=2880 HEIGHT=1440` へ上げます。X5 の 360 equirectangular は横:縦 = `2:1` なので、script は sender-mac に `--require-aspect-ratio 2:1` を渡します。
+
 手動で分けて起動する場合:
 
 ```bash
@@ -85,9 +87,10 @@ cd sender-mac
 WEBRTC_PROVIDER=livekit swift run sender-mac \
   --codec hevc \
   --width 1920 \
-  --height 1080 \
+  --height 960 \
+  --require-aspect-ratio 2:1 \
   --fps 30 \
-  --bitrate 6000000 \
+  --bitrate 5000000 \
   --duration 600 \
   --pion-frame-socket 127.0.0.1:5005
 ```
