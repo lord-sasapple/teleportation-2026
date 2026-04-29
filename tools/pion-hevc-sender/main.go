@@ -626,14 +626,7 @@ func handleSignal(ctx context.Context, c *websocket.Conn, pc *webrtc.PeerConnect
 	case "peer-joined":
 		log.Printf("signaling recv: peer-joined role=%s", msg.Role)
 		if msg.Role == "receiver" && localOfferSDP != "" {
-			if pc.SignalingState() != webrtc.SignalingStateHaveLocalOffer {
-				log.Printf("skip offer resend: signalingState=%s; restart pion-hevc-sender for clean receiver reconnect", pc.SignalingState())
-				return nil
-			}
-			if err := writeJSON(ctx, c, signalMessage{Type: "offer", SDP: localOfferSDP}); err != nil {
-				return fmt.Errorf("resend offer after receiver joined: %w", err)
-			}
-			log.Printf("signaling resend: offer after receiver joined")
+			log.Printf("skip offer resend: signalingState=%s; initial offer is already sent", pc.SignalingState())
 		}
 	case "answer":
 		log.Printf("signaling recv: answer")
