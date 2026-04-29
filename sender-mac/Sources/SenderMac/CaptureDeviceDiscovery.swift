@@ -74,33 +74,37 @@ struct CaptureDeviceDiscovery {
         }
 
         device.activeFormat = selection.format
-        let frameDuration = CMTime(value: 1, timescale: selection.fps)
+        let frameDuration = CMTime(seconds: 1.0 / selection.fps, preferredTimescale: 60_000)
         device.activeVideoMinFrameDuration = frameDuration
         device.activeVideoMaxFrameDuration = frameDuration
 
         let dimensions = CMVideoFormatDescriptionGetDimensions(selection.format.formatDescription)
         if !selection.isExactMatch {
-            Logger.warn("要求 format が見つからないため近い format を使います: requested=\(config.width)x\(config.height)@\(config.fps)fps actual=\(dimensions.width)x\(dimensions.height)@\(selection.fps)fps")
+            Logger.warn("要求 format が見つからないため近い format を使います: requested=\(config.width)x\(config.height)@\(config.fps)fps actual=\(dimensions.width)x\(dimensions.height)@\(String(format: "%.2f", selection.fps))fps")
         }
-        Logger.info("capture format を設定しました: \(dimensions.width)x\(dimensions.height) @ \(selection.fps)fps")
+        Logger.info("capture format を設定しました: \(dimensions.width)x\(dimensions.height) @ \(String(format: "%.2f", selection.fps))fps")
     }
 
     private static func chooseFormat(device: AVCaptureDevice, config: AppConfig) -> FormatSelection? {
-        let matches = device.formats.filter { format in
+        let targetFPS = Double(config.fps)
+
+        let matches = device.formats.compactMap { format -> FormatSelection? in
             let dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
-            let supportsResolution = dimensions.width == config.width && dimensions.height == config.height
-            let supportsFPS = format.videoSupportedFrameRateRanges.contains { range in
-                range.minFrameRate <= Double(config.fps) && range.maxFrameRate >= Double(config.fps)
+            guard dimensions.width == config.width && dimensions.height == config.height else {
+                return nil
             }
-            return supportsResolution && supportsFPS
+
+            guard let selectedFPS = supportedFPS(for: format, targetFPS: targetFPS) else {
+                return nil
+            }
+
+            return FormatSelection(format: format, fps: selectedFPS, isExactMatch: true)
         }
 
         if let exact = matches.sorted(by: { lhs, rhs in
-            let lhsMaxFPS = lhs.videoSupportedFrameRateRanges.map(\.maxFrameRate).max() ?? 0
-            let rhsMaxFPS = rhs.videoSupportedFrameRateRanges.map(\.maxFrameRate).max() ?? 0
-            return lhsMaxFPS < rhsMaxFPS
+            abs(lhs.fps - targetFPS) < abs(rhs.fps - targetFPS)
         }).first {
-            return FormatSelection(format: exact, fps: config.fps, isExactMatch: true)
+            return exact
         }
 
         guard config.useBuiltinCamera else {
@@ -110,18 +114,39 @@ struct CaptureDeviceDiscovery {
         return chooseClosestBuiltinFormat(device: device, targetWidth: config.width, targetHeight: config.height, targetFPS: config.fps)
     }
 
+    private static func supportedFPS(for format: AVCaptureDevice.Format, targetFPS: Double) -> Double? {
+        let tolerance = 0.5
+
+        for range in format.videoSupportedFrameRateRanges {
+            if range.minFrameRate - tolerance <= targetFPS && targetFPS <= range.maxFrameRate + tolerance {
+                if range.minFrameRate <= targetFPS && targetFPS <= range.maxFrameRate {
+                    return targetFPS
+                }
+
+                if abs(range.maxFrameRate - targetFPS) <= tolerance {
+                    return range.maxFrameRate
+                }
+
+                if abs(range.minFrameRate - targetFPS) <= tolerance {
+                    return range.minFrameRate
+                }
+            }
+        }
+
+        return nil
+    }
+
     private static func chooseClosestBuiltinFormat(device: AVCaptureDevice, targetWidth: Int32, targetHeight: Int32, targetFPS: Int32) -> FormatSelection? {
         let candidates = device.formats.compactMap { format -> (format: AVCaptureDevice.Format, dimensions: CMVideoDimensions, fps: Int32, supportsTargetFPS: Bool)? in
             let ranges = format.videoSupportedFrameRateRanges
             guard let bestRange = ranges.max(by: { $0.maxFrameRate < $1.maxFrameRate }) else {
                 return nil
             }
-            let supportsTargetFPS = ranges.contains { range in
-                range.minFrameRate <= Double(targetFPS) && range.maxFrameRate >= Double(targetFPS)
-            }
-            let selectedFPS = supportsTargetFPS ? targetFPS : Int32(bestRange.maxFrameRate.rounded(.down))
+            let selectedTargetFPS = supportedFPS(for: format, targetFPS: Double(targetFPS))
+            let supportsTargetFPS = selectedTargetFPS != nil
+            let selectedFPS = selectedTargetFPS ?? max(1.0, bestRange.maxFrameRate)
             let dimensions = CMVideoFormatDescriptionGetDimensions(format.formatDescription)
-            return (format, dimensions, max(1, selectedFPS), supportsTargetFPS)
+            return (format, dimensions, selectedFPS, supportsTargetFPS)
         }
 
         let targetPixels = Int(targetWidth) * Int(targetHeight)
@@ -162,7 +187,7 @@ struct CaptureDeviceDiscovery {
 
 private struct FormatSelection {
     let format: AVCaptureDevice.Format
-    let fps: Int32
+    let fps: Double
     let isExactMatch: Bool
 }
 
