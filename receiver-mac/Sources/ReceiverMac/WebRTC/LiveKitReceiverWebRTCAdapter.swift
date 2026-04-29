@@ -99,19 +99,12 @@ final class LiveKitReceiverWebRTCAdapter: NSObject, ReceiverWebRTCAdapter, @unch
         }
 
         peerConnection.statistics { report in
-            let lines = report.statistics.values
-                .sorted { lhs, rhs in
-                    if lhs.type == rhs.type {
-                        return lhs.id < rhs.id
-                    }
-                    return lhs.type < rhs.type
-                }
-                .compactMap { Self.receiverStatsSummary(for: $0) }
+            let lines = Self.receiverStatsSummaries(from: report)
 
             if lines.isEmpty {
                 Logger.info("receiver stats: video inbound/track/candidate 情報なし")
             } else {
-                for line in lines.prefix(8) {
+                for line in lines.prefix(12) {
                     Logger.info(line)
                 }
             }
@@ -237,7 +230,68 @@ final class LiveKitReceiverWebRTCAdapter: NSObject, ReceiverWebRTCAdapter, @unch
         }
     }
 
-    private static func receiverStatsSummary(for stat: LKRTCStatistics) -> String? {
+    private static func receiverStatsSummaries(from report: LKRTCStatisticsReport) -> [String] {
+        var localCandidates: [String: LKRTCStatistics] = [:]
+        var remoteCandidates: [String: LKRTCStatistics] = [:]
+
+        for stat in report.statistics.values {
+            if stat.type == "local-candidate" {
+                localCandidates[stat.id] = stat
+            } else if stat.type == "remote-candidate" {
+                remoteCandidates[stat.id] = stat
+            }
+        }
+
+        return report.statistics.values
+            .sorted { lhs, rhs in
+                if lhs.type == rhs.type {
+                    return lhs.id < rhs.id
+                }
+                return lhs.type < rhs.type
+            }
+            .compactMap { stat in
+                receiverStatsSummary(
+                    for: stat,
+                    localCandidates: localCandidates,
+                    remoteCandidates: remoteCandidates
+                )
+            }
+    }
+
+    private static func candidateDescription(_ stat: LKRTCStatistics?) -> String {
+        guard let stat else {
+            return "-"
+        }
+
+        let values = stat.values
+
+        func value(_ keys: [String]) -> String? {
+            for key in keys {
+                if let v = values[key] as? NSString {
+                    return v as String
+                }
+                if let v = values[key] as? String {
+                    return v
+                }
+                if let v = values[key] as? NSNumber {
+                    return v.stringValue
+                }
+            }
+            return nil
+        }
+
+        let type = value(["candidateType", "type"]) ?? "unknown"
+        let protocolName = value(["protocol", "relayProtocol"]) ?? "-"
+        let address = value(["address", "ip"]) ?? "-"
+        let port = value(["port"]) ?? "-"
+        return "\(type) \(protocolName) \(address):\(port)"
+    }
+
+    private static func receiverStatsSummary(
+        for stat: LKRTCStatistics,
+        localCandidates: [String: LKRTCStatistics],
+        remoteCandidates: [String: LKRTCStatistics]
+    ) -> String? {
         let values = stat.values
 
         func number(_ key: String) -> String? {
@@ -281,7 +335,13 @@ final class LiveKitReceiverWebRTCAdapter: NSObject, ReceiverWebRTCAdapter, @unch
             guard number("nominated") == "1" || number("selected") == "1" || string("state") == "succeeded" else {
                 return nil
             }
-            return "receiver stats candidate-pair: id=\(stat.id) state=\(string("state") ?? "-") rtt=\(number("currentRoundTripTime") ?? "-") bytesRecv=\(number("bytesReceived") ?? "-") bytesSent=\(number("bytesSent") ?? "-")"
+
+            let localId = string("localCandidateId")
+            let remoteId = string("remoteCandidateId")
+            let local = localId.flatMap { localCandidates[$0] }
+            let remote = remoteId.flatMap { remoteCandidates[$0] }
+
+            return "receiver stats candidate-pair: id=\(stat.id) state=\(string("state") ?? "-") rtt=\(number("currentRoundTripTime") ?? "-") bytesRecv=\(number("bytesReceived") ?? "-") bytesSent=\(number("bytesSent") ?? "-") local=\(candidateDescription(local)) remote=\(candidateDescription(remote))"
         case "transport":
             return "receiver stats transport: id=\(stat.id) selectedPair=\(string("selectedCandidatePairId") ?? "-") dtls=\(string("dtlsState") ?? "-") bytesRecv=\(number("bytesReceived") ?? "-") bytesSent=\(number("bytesSent") ?? "-")"
         case "codec":
