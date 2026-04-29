@@ -87,6 +87,7 @@ func run(ctx context.Context, cfg config) error {
 	defer pc.Close()
 
 	var wsReady atomic.Bool
+	var mediaReady atomic.Bool
 	var wsConn *websocket.Conn
 	var h265Track *webrtc.TrackLocalStaticSample
 
@@ -95,13 +96,16 @@ func run(ctx context.Context, cfg config) error {
 	})
 	pc.OnConnectionStateChange(func(state webrtc.PeerConnectionState) {
 		log.Printf("PeerConnection state: %s", state.String())
-		if state == webrtc.PeerConnectionStateConnected && h265Track != nil {
-			if cfg.annexBFile != "" {
+		if state == webrtc.PeerConnectionStateConnected {
+			mediaReady.Store(true)
+			if cfg.annexBFile != "" && h265Track != nil {
 				go streamAnnexBFile(ctx, h265Track, cfg.annexBFile, cfg.fps)
 			}
-			if cfg.listenFrames != "" {
-				go listenFrameStream(ctx, h265Track, cfg.listenFrames, cfg.fps)
-			}
+		}
+		if state == webrtc.PeerConnectionStateFailed ||
+			state == webrtc.PeerConnectionStateClosed ||
+			state == webrtc.PeerConnectionStateDisconnected {
+			mediaReady.Store(false)
 		}
 	})
 	pc.OnICEGatheringStateChange(func(state webrtc.ICEGatheringState) {
@@ -135,6 +139,9 @@ func run(ctx context.Context, cfg config) error {
 	h265Track, err = addH265Track(pc)
 	if err != nil {
 		return err
+	}
+	if cfg.listenFrames != "" {
+		go listenFrameStream(ctx, h265Track, cfg.listenFrames, cfg.fps, &mediaReady)
 	}
 
 	wsURL := strings.TrimRight(cfg.signalingURL, "/") + "/room/" + cfg.room + "?role=sender"
@@ -191,7 +198,7 @@ func run(ctx context.Context, cfg config) error {
 			if typ != websocket.MessageText {
 				continue
 			}
-			if err := handleSignal(ctx, pc, data); err != nil {
+			if err := handleSignal(ctx, c, pc, data, local.SDP); err != nil {
 				log.Printf("signal handle warning: %v", err)
 			}
 		}
@@ -246,7 +253,7 @@ func addH265Track(pc *webrtc.PeerConnection) (*webrtc.TrackLocalStaticSample, er
 	return track, nil
 }
 
-func listenFrameStream(ctx context.Context, track *webrtc.TrackLocalStaticSample, address string, fps int) {
+func listenFrameStream(ctx context.Context, track *webrtc.TrackLocalStaticSample, address string, fps int, mediaReady *atomic.Bool) {
 	listener, err := net.Listen("tcp", address)
 	if err != nil {
 		log.Printf("frame listener failed: %v", err)
@@ -277,12 +284,12 @@ func listenFrameStream(ctx context.Context, track *webrtc.TrackLocalStaticSample
 		}
 
 		log.Printf("frame source connected: %s", conn.RemoteAddr())
-		handleFrameConn(ctx, track, conn, frameDuration)
+		handleFrameConn(ctx, track, conn, frameDuration, mediaReady)
 		log.Printf("frame source disconnected")
 	}
 }
 
-func handleFrameConn(ctx context.Context, track *webrtc.TrackLocalStaticSample, conn net.Conn, frameDuration time.Duration) {
+func handleFrameConn(ctx context.Context, track *webrtc.TrackLocalStaticSample, conn net.Conn, frameDuration time.Duration, mediaReady *atomic.Bool) {
 	defer conn.Close()
 
 	var sent uint64
@@ -316,6 +323,10 @@ func handleFrameConn(ctx context.Context, track *webrtc.TrackLocalStaticSample, 
 		if _, err := io.ReadFull(conn, frame); err != nil {
 			log.Printf("frame payload read failed: %v", err)
 			return
+		}
+
+		if mediaReady != nil && !mediaReady.Load() {
+			continue
 		}
 
 		if err := track.WriteSample(media.Sample{
@@ -474,7 +485,7 @@ func isH265VCL(nalType byte) bool {
 	return nalType <= 31
 }
 
-func handleSignal(ctx context.Context, pc *webrtc.PeerConnection, data []byte) error {
+func handleSignal(ctx context.Context, c *websocket.Conn, pc *webrtc.PeerConnection, data []byte, localOfferSDP string) error {
 	var msg signalMessage
 	if err := json.Unmarshal(data, &msg); err != nil {
 		return fmt.Errorf("decode signaling json: %w text=%s", err, string(data))
@@ -485,6 +496,12 @@ func handleSignal(ctx context.Context, pc *webrtc.PeerConnection, data []byte) e
 		log.Printf("signaling recv: joined room=%s role=%s", msg.RoomID, msg.Role)
 	case "peer-joined":
 		log.Printf("signaling recv: peer-joined role=%s", msg.Role)
+		if msg.Role == "receiver" && localOfferSDP != "" {
+			if err := writeJSON(ctx, c, signalMessage{Type: "offer", SDP: localOfferSDP}); err != nil {
+				return fmt.Errorf("resend offer after receiver joined: %w", err)
+			}
+			log.Printf("signaling resend: offer after receiver joined")
+		}
 	case "answer":
 		log.Printf("signaling recv: answer")
 		logCodecLines("remote answer", msg.SDP)
