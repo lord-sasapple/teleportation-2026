@@ -16,7 +16,7 @@ final class LiveKitReceiverWebRTCAdapter: NSObject, ReceiverWebRTCAdapter, @unch
     private var peerConnection: LKRTCPeerConnection?
     private var preferredCodec: String = "hevc"
     private let frameRenderer = PixelBufferFrameRenderer()
-    private weak var attachedVideoTrack: LKRTCVideoTrack?
+    private var attachedVideoTrack: LKRTCVideoTrack?
 
     init(iceServers: [String]) {
         self.iceServers = iceServers
