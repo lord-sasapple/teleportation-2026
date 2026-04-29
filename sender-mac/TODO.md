@@ -14,9 +14,12 @@
 - [x] WebRTC adapter boundary
 - [x] DataChannel frame timestamp JSON generation
 - [x] encoded frame callback bridge
+- [x] optional WebRTC.xcframework SwiftPM binary target wiring
+- [x] native WebRTC link-probe adapter skeleton
 - [ ] Xcode macOS app bundle
 - [ ] Info.plist camera usage description
-- [ ] libwebrtc native dependency strategy
+- [x] libwebrtc native dependency strategy
+- [ ] acquire/build macOS-compatible WebRTC.xcframework
 - [ ] libwebrtc PeerConnection
 - [ ] codec preference HEVC first
 - [ ] encoded frame bridge into libwebrtc video source

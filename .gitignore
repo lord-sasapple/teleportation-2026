@@ -43,6 +43,10 @@ build/
 # Swift Package Manager
 Package.resolved
 
+# Large local native dependencies
+sender-mac/ThirdParty/WebRTC/WebRTC.xcframework/
+sender-mac/ThirdParty/WebRTC/*.zip
+
 # Unity
 receiver-quest/Library/
 receiver-quest/Temp/

@@ -7,7 +7,6 @@ final class SenderSession: @unchecked Sendable {
 
     init(config: AppConfig) {
         self.config = config
-        self.webRTC = NativeWebRTCSenderUnavailableAdapter(config: config)
 
         if let signalingBaseURL = config.signalingBaseURL,
            let roomId = config.roomId,
@@ -19,6 +18,8 @@ final class SenderSession: @unchecked Sendable {
                 Logger.warn("--signaling-url と --room はセットで指定してください。signaling 接続はスキップします")
             }
         }
+
+        self.webRTC = WebRTCAdapterFactory.make(config: config, signalingClient: signalingClient)
     }
 
     func start() {
@@ -79,4 +80,3 @@ final class SenderSession: @unchecked Sendable {
         }
     }
 }
-
