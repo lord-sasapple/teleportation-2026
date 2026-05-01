@@ -4,6 +4,26 @@ import CoreVideo
 import Foundation
 import SceneKit
 
+struct ViewerFrameUpdateResult: Sendable {
+    let wasUpdated: Bool
+    let detail: String
+    let totalDurationMs: Int64
+    let cgImageDurationMs: Int64
+    let nsImageDurationMs: Int64
+    let materialUpdateDurationMs: Int64
+
+    static func skipped(reason: String) -> ViewerFrameUpdateResult {
+        ViewerFrameUpdateResult(
+            wasUpdated: false,
+            detail: reason,
+            totalDurationMs: 0,
+            cgImageDurationMs: 0,
+            nsImageDurationMs: 0,
+            materialUpdateDurationMs: 0
+        )
+    }
+}
+
 @MainActor
 final class Viewer360 {
     private var yaw: Double = 0
@@ -11,6 +31,7 @@ final class Viewer360 {
     private let ciContext = CIContext()
     private var frameCount: Int64 = 0
     private var lastFrameUpdateMs: Int64 = 0
+    private let minFrameUpdateIntervalMs: Int64 = 33
 
     private var window: NSWindow?
     private var sceneView: MouseLookSCNView?
@@ -60,29 +81,48 @@ final class Viewer360 {
         window?.makeKeyAndOrderFront(nil)
     }
 
-    func updateFrame(_ pixelBuffer: CVPixelBuffer) {
-        let nowMs = Int64(Date().timeIntervalSince1970 * 1000)
-        if nowMs - lastFrameUpdateMs < 66 {
-            return
+    @discardableResult
+    func updateFrame(_ pixelBuffer: CVPixelBuffer) -> ViewerFrameUpdateResult {
+        let startMs = Self.nowMs()
+        if startMs - lastFrameUpdateMs < minFrameUpdateIntervalMs {
+            return .skipped(reason: "viewer fps gate interval=\(startMs - lastFrameUpdateMs)ms")
         }
-        lastFrameUpdateMs = nowMs
+        lastFrameUpdateMs = startMs
         frameCount += 1
 
         let image = CIImage(cvPixelBuffer: pixelBuffer)
+        let cgStartMs = Self.nowMs()
         guard let cgImage = ciContext.createCGImage(image, from: image.extent) else {
             Logger.warn("receiver frame を CGImage に変換できません")
-            return
+            return .skipped(reason: "CGImage conversion failed")
         }
+        let cgEndMs = Self.nowMs()
 
+        let nsStartMs = Self.nowMs()
         let nsImage = NSImage(
             cgImage: cgImage,
             size: NSSize(width: CVPixelBufferGetWidth(pixelBuffer), height: CVPixelBufferGetHeight(pixelBuffer))
         )
+        let nsEndMs = Self.nowMs()
+
+        let materialStartMs = Self.nowMs()
         sphereMaterial?.diffuse.contents = nsImage
+        let materialEndMs = Self.nowMs()
+
+        let result = ViewerFrameUpdateResult(
+            wasUpdated: true,
+            detail: "size=\(CVPixelBufferGetWidth(pixelBuffer))x\(CVPixelBufferGetHeight(pixelBuffer)) cgImage=\(cgEndMs - cgStartMs)ms nsImage=\(nsEndMs - nsStartMs)ms material=\(materialEndMs - materialStartMs)ms",
+            totalDurationMs: materialEndMs - startMs,
+            cgImageDurationMs: cgEndMs - cgStartMs,
+            nsImageDurationMs: nsEndMs - nsStartMs,
+            materialUpdateDurationMs: materialEndMs - materialStartMs
+        )
 
         if frameCount == 1 || frameCount % 30 == 0 {
-            Logger.info("viewer texture を更新しました: frames=\(frameCount) size=\(CVPixelBufferGetWidth(pixelBuffer))x\(CVPixelBufferGetHeight(pixelBuffer))")
+            Logger.info("viewer texture を更新しました: frames=\(frameCount) size=\(CVPixelBufferGetWidth(pixelBuffer))x\(CVPixelBufferGetHeight(pixelBuffer)) total=\(result.totalDurationMs)ms cgImage=\(result.cgImageDurationMs)ms nsImage=\(result.nsImageDurationMs)ms material=\(result.materialUpdateDurationMs)ms")
         }
+
+        return result
     }
 
     private func setupWindowIfNeeded() {
@@ -119,6 +159,7 @@ final class Viewer360 {
         let frame = NSRect(x: 100, y: 100, width: 1280, height: 720)
         let view = MouseLookSCNView(frame: frame)
         view.scene = scene
+        view.pointOfView = cameraNode
         view.backgroundColor = NSColor.black
         view.allowsCameraControl = false
         view.rendersContinuously = true
@@ -152,6 +193,10 @@ final class Viewer360 {
     private func updateCamera() {
         guard let cameraNode else { return }
         cameraNode.eulerAngles = SCNVector3(Float(pitch), Float(yaw), 0)
+    }
+
+    private static func nowMs() -> Int64 {
+        Int64(Date().timeIntervalSince1970 * 1000)
     }
 
     private static func placeholderGridImage(size: Int) -> NSImage {
@@ -192,7 +237,12 @@ final class MouseLookSCNView: SCNView {
 
     private var previousPoint: NSPoint?
 
+    override var acceptsFirstResponder: Bool { true }
+
+    override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
     override func mouseDown(with event: NSEvent) {
+        window?.makeFirstResponder(self)
         previousPoint = convert(event.locationInWindow, from: nil)
     }
 
@@ -209,6 +259,7 @@ final class MouseLookSCNView: SCNView {
     }
 
     override func mouseUp(with event: NSEvent) {
+        _ = event
         previousPoint = nil
     }
 }
