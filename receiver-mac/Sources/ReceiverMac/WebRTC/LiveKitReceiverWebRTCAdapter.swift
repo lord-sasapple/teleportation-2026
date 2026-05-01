@@ -105,7 +105,7 @@ final class LiveKitReceiverWebRTCAdapter: NSObject, ReceiverWebRTCAdapter, @unch
             if lines.isEmpty {
                 Logger.info("receiver stats: video inbound/track/candidate 情報なし")
             } else {
-                for line in lines.prefix(12) {
+                for line in lines.prefix(16) {
                     Logger.info(line)
                 }
             }
@@ -321,12 +321,19 @@ final class LiveKitReceiverWebRTCAdapter: NSObject, ReceiverWebRTCAdapter, @unch
             return nil
         }
 
+        func averageMs(totalKey: String, countKey: String) -> String {
+            guard let total = double(values[totalKey]), let count = double(values[countKey]), count > 0 else {
+                return "-"
+            }
+            return String(format: "%.2f", total * 1000.0 / count)
+        }
+
         switch stat.type {
         case "inbound-rtp":
             guard string("kind") == "video" || string("mediaType") == "video" else {
                 return nil
             }
-            return "receiver stats inbound-rtp: id=\(stat.id) bytes=\(number("bytesReceived") ?? "-") packets=\(number("packetsReceived") ?? "-") framesDecoded=\(number("framesDecoded") ?? "-") framesReceived=\(number("framesReceived") ?? "-") keyFrames=\(number("keyFramesDecoded") ?? "-") jitter=\(number("jitter") ?? "-") drops=\(number("framesDropped") ?? "-")"
+            return "receiver stats inbound-rtp: id=\(stat.id) bytes=\(number("bytesReceived") ?? "-") packets=\(number("packetsReceived") ?? "-") framesDecoded=\(number("framesDecoded") ?? "-") framesReceived=\(number("framesReceived") ?? "-") keyFrames=\(number("keyFramesDecoded") ?? "-") jitter=\(number("jitter") ?? "-") drops=\(number("framesDropped") ?? "-") jitterBufferDelay=\(number("jitterBufferDelay") ?? "-") jitterBufferEmitted=\(number("jitterBufferEmittedCount") ?? "-") avgJitterBufferMs=\(averageMs(totalKey: "jitterBufferDelay", countKey: "jitterBufferEmittedCount")) totalDecodeTime=\(number("totalDecodeTime") ?? "-") avgDecodeMs=\(averageMs(totalKey: "totalDecodeTime", countKey: "framesDecoded")) framesAssembledFromMultiplePackets=\(number("framesAssembledFromMultiplePackets") ?? "-")"
         case "track":
             guard string("kind") == "video" || stat.id.lowercased().contains("video") else {
                 return nil
@@ -342,7 +349,7 @@ final class LiveKitReceiverWebRTCAdapter: NSObject, ReceiverWebRTCAdapter, @unch
             let local = localId.flatMap { localCandidates[$0] }
             let remote = remoteId.flatMap { remoteCandidates[$0] }
 
-            return "receiver stats candidate-pair: id=\(stat.id) state=\(string("state") ?? "-") rtt=\(number("currentRoundTripTime") ?? "-") bytesRecv=\(number("bytesReceived") ?? "-") bytesSent=\(number("bytesSent") ?? "-") local=\(candidateDescription(local)) remote=\(candidateDescription(remote))"
+            return "receiver stats candidate-pair: id=\(stat.id) state=\(string("state") ?? "-") rtt=\(number("currentRoundTripTime") ?? "-") availableOutgoingBitrate=\(number("availableOutgoingBitrate") ?? "-") bytesRecv=\(number("bytesReceived") ?? "-") bytesSent=\(number("bytesSent") ?? "-") local=\(candidateDescription(local)) remote=\(candidateDescription(remote))"
         case "transport":
             return "receiver stats transport: id=\(stat.id) selectedPair=\(string("selectedCandidatePairId") ?? "-") dtls=\(string("dtlsState") ?? "-") bytesRecv=\(number("bytesReceived") ?? "-") bytesSent=\(number("bytesSent") ?? "-")"
         case "codec":
@@ -354,6 +361,19 @@ final class LiveKitReceiverWebRTCAdapter: NSObject, ReceiverWebRTCAdapter, @unch
         default:
             return nil
         }
+    }
+
+    private static func double(_ value: Any?) -> Double? {
+        if let value = value as? NSNumber {
+            return value.doubleValue
+        }
+        if let value = value as? NSString {
+            return value.doubleValue
+        }
+        if let value = value as? String {
+            return Double(value)
+        }
+        return nil
     }
 }
 
@@ -456,9 +476,10 @@ private final class PixelBufferFrameRenderer: NSObject, LKRTCVideoRenderer {
         }
 
         renderedFrames += 1
+        let callbackTimeMs = Int64(Date().timeIntervalSince1970 * 1000)
         if renderedFrames == 1 || renderedFrames % 30 == 0 {
             Logger.info(
-                "receiver renderFrame: count=\(renderedFrames) buffer=\(String(describing: type(of: frame.buffer))) size=\(frame.buffer.width)x\(frame.buffer.height) rotation=\(frame.rotation.rawValue)"
+                "receiver renderFrame: count=\(renderedFrames) callbackTimeMs=\(callbackTimeMs) buffer=\(String(describing: type(of: frame.buffer))) size=\(frame.buffer.width)x\(frame.buffer.height) rotation=\(frame.rotation.rawValue)"
             )
         }
 
@@ -467,6 +488,7 @@ private final class PixelBufferFrameRenderer: NSObject, LKRTCVideoRenderer {
             return
         }
 
+        let convertStartMs = Int64(Date().timeIntervalSince1970 * 1000)
         let i420Buffer = frame.buffer.toI420()
         guard let pixelBuffer = convertI420ToBGRA(i420Buffer) else {
             conversionFailures += 1
@@ -475,10 +497,11 @@ private final class PixelBufferFrameRenderer: NSObject, LKRTCVideoRenderer {
             }
             return
         }
+        let convertEndMs = Int64(Date().timeIntervalSince1970 * 1000)
 
         convertedI420Frames += 1
         if convertedI420Frames == 1 || convertedI420Frames % 30 == 0 {
-            Logger.info("receiver I420 frame を BGRA CVPixelBuffer に変換しました: count=\(convertedI420Frames)")
+            Logger.info("receiver I420 frame を BGRA CVPixelBuffer に変換しました: count=\(convertedI420Frames) convertMs=\(convertEndMs - convertStartMs)")
         }
         onPixelBuffer?(pixelBuffer)
     }
@@ -525,7 +548,6 @@ private final class PixelBufferFrameRenderer: NSObject, LKRTCVideoRenderer {
             srcU: i420Buffer.dataU,
             srcStrideU: i420Buffer.strideU,
             srcV: i420Buffer.dataV,
-            srcStrideV: i420Buffer.strideV,
             dstBGRA: baseAddress,
             dstStrideBGRA: Int32(CVPixelBufferGetBytesPerRow(output)),
             width: i420Buffer.width,
