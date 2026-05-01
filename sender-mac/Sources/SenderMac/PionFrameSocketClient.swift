@@ -3,9 +3,6 @@ import Foundation
 import Network
 
 final class PionFrameSocketClient: @unchecked Sendable {
-    private static let protocolMagic = "TPF2".data(using: .ascii)!
-    private static let headerLength: UInt16 = 48
-
     private let host: NWEndpoint.Host
     private let port: NWEndpoint.Port
     private let queue = DispatchQueue(label: "telepresence.sender.pion-frame-socket")
@@ -59,11 +56,9 @@ final class PionFrameSocketClient: @unchecked Sendable {
         }
 
         let tcpSendEnqueueTimeMs = Clock.wallTimeMs()
-        let packet = Self.makePacket(
-            frame: frame,
-            payload: data,
-            tcpSendEnqueueTimeMs: tcpSendEnqueueTimeMs
-        )
+        var length = UInt32(data.count).bigEndian
+        let header = Data(bytes: &length, count: 4)
+        let packet = header + data
 
         connection?.send(content: packet, completion: .contentProcessed { error in
             if let error {
@@ -80,38 +75,6 @@ final class PionFrameSocketClient: @unchecked Sendable {
             )
             Logger.info("Pion frame socket sent: frames=\(sentFrames) seq=\(frame.log.sequence) bytes=\(data.count) keyframe=\(frame.log.isKeyframe)")
         }
-    }
-
-    private static func makePacket(frame: EncodedVideoFrame, payload: Data, tcpSendEnqueueTimeMs: Int64) -> Data {
-        var packet = Data()
-        packet.append(protocolMagic)
-        appendUInt16(headerLength, to: &packet)
-        appendUInt16(0, to: &packet)
-        appendInt64(frame.log.sequence, to: &packet)
-        appendInt64(frame.log.captureTimeMs, to: &packet)
-        appendInt64(frame.log.encodeStartTimeMs, to: &packet)
-        appendInt64(frame.log.encodeEndTimeMs, to: &packet)
-        appendInt64(tcpSendEnqueueTimeMs, to: &packet)
-        packet.append(frame.log.isKeyframe ? 1 : 0)
-        packet.append(contentsOf: [0, 0, 0])
-        appendUInt32(UInt32(payload.count), to: &packet)
-        packet.append(payload)
-        return packet
-    }
-
-    private static func appendUInt16(_ value: UInt16, to data: inout Data) {
-        var bigEndian = value.bigEndian
-        data.append(Data(bytes: &bigEndian, count: MemoryLayout<UInt16>.size))
-    }
-
-    private static func appendUInt32(_ value: UInt32, to data: inout Data) {
-        var bigEndian = value.bigEndian
-        data.append(Data(bytes: &bigEndian, count: MemoryLayout<UInt32>.size))
-    }
-
-    private static func appendInt64(_ value: Int64, to data: inout Data) {
-        var bigEndian = UInt64(bitPattern: value).bigEndian
-        data.append(Data(bytes: &bigEndian, count: MemoryLayout<UInt64>.size))
     }
 
     private static func makeAnnexBAccessUnit(from sampleBuffer: CMSampleBuffer) -> Data? {
