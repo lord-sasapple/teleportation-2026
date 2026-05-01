@@ -8,8 +8,13 @@ final class ReceiverApp: @unchecked Sendable {
     private var viewer: Viewer360?
     private var running = true
     private var receivedFrames: Int64 = 0
+    private var enqueuedViewerFrames: Int64 = 0
+    private var skippedViewerFrames: Int64 = 0
     private var latestTimestamp: FrameTimestampMessage?
     private var latestTimestampReceiveTimeMs: Int64 = 0
+    private var latestRenderFrame: ReceivedRenderFrame?
+    private var viewerRenderTaskRunning = false
+    private let latestFrameLock = NSLock()
 
     init(config: AppConfig) {
         self.config = config
@@ -43,26 +48,7 @@ final class ReceiverApp: @unchecked Sendable {
         }
 
         webRTC.onFrame = { [weak self] pixelBuffer in
-            guard let self else { return }
-            self.receivedFrames += 1
-            let frameCount = self.receivedFrames
-            let nowMs = Self.nowMs()
-
-            if frameCount == 1 || frameCount % 30 == 0 {
-                if let ts = self.latestTimestamp {
-                    let captureToRenderApprox = nowMs - ts.captureTimeMs
-                    let sendToRenderApprox = nowMs - ts.sendTimeMs
-                    let dataToRenderApprox = nowMs - self.latestTimestampReceiveTimeMs
-                    Logger.info("frame received: count=\(frameCount) size=\(CVPixelBufferGetWidth(pixelBuffer))x\(CVPixelBufferGetHeight(pixelBuffer)) approxLatency captureToRender=\(captureToRenderApprox)ms sendToRender=\(sendToRenderApprox)ms dataToRender=\(dataToRenderApprox)ms tsSeq=\(ts.sequence)")
-                } else {
-                    Logger.info("frame received: count=\(frameCount) size=\(CVPixelBufferGetWidth(pixelBuffer))x\(CVPixelBufferGetHeight(pixelBuffer))")
-                }
-            }
-
-            let sendablePixelBuffer = SendablePixelBuffer(pixelBuffer)
-            Task { @MainActor [weak self] in
-                self?.viewer?.updateFrame(sendablePixelBuffer.value)
-            }
+            self?.handleReceivedPixelBuffer(pixelBuffer)
         }
 
         signalingClient.onMessage = { [weak self] message in
@@ -88,6 +74,97 @@ final class ReceiverApp: @unchecked Sendable {
 
         statsLoop()
         waitUntilStopped()
+    }
+
+    private func handleReceivedPixelBuffer(_ pixelBuffer: CVPixelBuffer) {
+        receivedFrames += 1
+        let frameCount = receivedFrames
+        let nowMs = Self.nowMs()
+        let renderFrame = ReceivedRenderFrame(
+            pixelBuffer: pixelBuffer,
+            sequence: frameCount,
+            renderFrameCallbackTimeMs: nowMs,
+            width: CVPixelBufferGetWidth(pixelBuffer),
+            height: CVPixelBufferGetHeight(pixelBuffer)
+        )
+
+        if frameCount == 1 || frameCount % 30 == 0 {
+            if let ts = latestTimestamp {
+                let captureToRenderApprox = nowMs - ts.captureTimeMs
+                let sendToRenderApprox = nowMs - ts.sendTimeMs
+                let dataToRenderApprox = nowMs - latestTimestampReceiveTimeMs
+                Logger.info("frame received: count=\(frameCount) size=\(renderFrame.width)x\(renderFrame.height) approxLatency captureToRender=\(captureToRenderApprox)ms sendToRender=\(sendToRenderApprox)ms dataToRender=\(dataToRenderApprox)ms tsSeq=\(ts.sequence)")
+            } else {
+                Logger.info("frame received: count=\(frameCount) size=\(renderFrame.width)x\(renderFrame.height) renderCallbackTimeMs=\(nowMs)")
+            }
+        }
+
+        latestFrameLock.lock()
+        if latestRenderFrame != nil {
+            skippedViewerFrames += 1
+        }
+        latestRenderFrame = renderFrame
+        let shouldStartRenderTask = !viewerRenderTaskRunning
+        if shouldStartRenderTask {
+            viewerRenderTaskRunning = true
+        }
+        let skipped = skippedViewerFrames
+        latestFrameLock.unlock()
+
+        if skipped > 0 && skipped % 30 == 0 {
+            Logger.info("latency receiver latest-only: overwrittenBeforeViewer=\(skipped)")
+        }
+
+        if shouldStartRenderTask {
+            scheduleViewerRenderLoop()
+        }
+    }
+
+    private func scheduleViewerRenderLoop() {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            while true {
+                let frame = self.takeLatestRenderFrame()
+                guard let frame else {
+                    self.markViewerRenderTaskStopped()
+                    return
+                }
+
+                let updateStartMs = Self.nowMs()
+                let callbackToViewerStartMs = updateStartMs - frame.renderFrameCallbackTimeMs
+                let result = self.viewer?.updateFrame(frame.pixelBuffer) ?? ViewerFrameUpdateResult.skipped(reason: "viewer nil")
+                let updateEndMs = Self.nowMs()
+
+                self.enqueuedViewerFrames += 1
+                if frame.sequence == 1 || self.enqueuedViewerFrames % 30 == 0 || result.wasUpdated {
+                    Logger.info(
+                        "latency receiver viewer: seq=\(frame.sequence) callbackToViewerStart=\(callbackToViewerStartMs)ms updateDuration=\(updateEndMs - updateStartMs)ms totalCallbackToViewerEnd=\(updateEndMs - frame.renderFrameCallbackTimeMs)ms updated=\(result.wasUpdated) detail=\(result.detail) displayed=\(self.enqueuedViewerFrames) overwritten=\(self.skippedViewerFrames)"
+                    )
+                }
+            }
+        }
+    }
+
+    private func takeLatestRenderFrame() -> ReceivedRenderFrame? {
+        latestFrameLock.lock()
+        defer { latestFrameLock.unlock() }
+        let frame = latestRenderFrame
+        latestRenderFrame = nil
+        return frame
+    }
+
+    private func markViewerRenderTaskStopped() {
+        latestFrameLock.lock()
+        viewerRenderTaskRunning = false
+        let shouldRestart = latestRenderFrame != nil
+        if shouldRestart {
+            viewerRenderTaskRunning = true
+        }
+        latestFrameLock.unlock()
+
+        if shouldRestart {
+            scheduleViewerRenderLoop()
+        }
     }
 
     private func handleDataChannelMessage(_ data: Data) {
@@ -174,12 +251,12 @@ final class ReceiverApp: @unchecked Sendable {
     }
 }
 
-private struct SendablePixelBuffer: @unchecked Sendable {
-    let value: CVPixelBuffer
-
-    init(_ value: CVPixelBuffer) {
-        self.value = value
-    }
+private struct ReceivedRenderFrame: @unchecked Sendable {
+    let pixelBuffer: CVPixelBuffer
+    let sequence: Int64
+    let renderFrameCallbackTimeMs: Int64
+    let width: Int
+    let height: Int
 }
 
 do {
